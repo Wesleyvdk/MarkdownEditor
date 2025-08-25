@@ -2,14 +2,29 @@
 
 import type React from "react"
 import { useState, useRef, useEffect } from "react"
-import { Button } from "~/components/ui/button"
-import { Input } from "~/components/ui/input"
-import { Badge } from "~/components/ui/badge"
-import { Separator } from "~/components/ui/separator"
-import { LinkAutocomplete } from "~/components/link-autocomplete"
-import { LinkVisualization } from "~/components/link-visualization"
-import { AIDocumentGenerator } from "~/components/ai-document-generator"
-import { Save, Network, Type, Bold, Italic, Link, List, Quote, Code, Hash, Brain, Sparkles } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
+import { LinkAutocomplete } from "@/components/link-autocomplete"
+import { LinkVisualization } from "@/components/link-visualization"
+import { AIDocumentGenerator } from "@/components/ai-document-generator"
+import {
+  Save,
+  Network,
+  Type,
+  Bold,
+  Italic,
+  Link,
+  List,
+  Quote,
+  Code,
+  Hash,
+  Brain,
+  Sparkles,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react"
 
 interface MarkdownEditorProps {
   noteId: string
@@ -80,12 +95,27 @@ export function MarkdownEditor({ noteId }: MarkdownEditorProps) {
   const [editingLineIndex, setEditingLineIndex] = useState<number | null>(null)
   const [lines, setLines] = useState<string[]>([])
   const [editingCodeBlock, setEditingCodeBlock] = useState<{ start: number; end: number } | null>(null)
+  const [showToolbar, setShowToolbar] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const editorRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setLines(content.split("\n"))
   }, [content])
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768)
+      if (window.innerWidth >= 768) {
+        setShowLinkViz(false) // Hide link viz on mobile by default
+      }
+    }
+
+    checkMobile()
+    window.addEventListener("resize", checkMobile)
+    return () => window.removeEventListener("resize", checkMobile)
+  }, [])
 
   const getCodeBlockRange = (lineIndex: number): { start: number; end: number } | null => {
     let start = -1
@@ -402,46 +432,63 @@ export function MarkdownEditor({ noteId }: MarkdownEditorProps) {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="p-4 border-b border-border">
-        <div className="flex items-center gap-4 mb-4">
+      <div className="p-3 md:p-4 border-b border-border">
+        <div className="flex items-center gap-2 md:gap-4 mb-3 md:mb-4">
           <Input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="text-xl font-semibold border-none shadow-none p-0 focus-visible:ring-0"
+            className="text-lg md:text-xl font-semibold border-none shadow-none p-0 focus-visible:ring-0"
             placeholder="Note title..."
           />
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setShowAIGenerator(true)}>
+          <div className="flex items-center gap-1 md:gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowAIGenerator(true)}
+              className="h-8 w-8 md:h-9 md:w-9 p-0"
+            >
               <Brain className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" className="h-8 w-8 md:h-9 md:w-9 p-0">
               <Save className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setShowLinkViz(!showLinkViz)}>
-              <Network className="h-4 w-4" />
-            </Button>
+            {!isMobile && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowLinkViz(!showLinkViz)}
+                className="h-8 w-8 md:h-9 md:w-9 p-0"
+              >
+                <Network className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </div>
 
         {/* Tags */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {tags.map((tag) => (
+        <div className="flex items-center gap-1 md:gap-2 flex-wrap">
+          {tags.slice(0, isMobile ? 3 : tags.length).map((tag) => (
             <Badge
               key={tag}
               variant="secondary"
-              className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground"
+              className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground text-xs"
               onClick={() => removeTag(tag)}
             >
               {tag} ×
             </Badge>
           ))}
-          <div className="flex items-center gap-2">
+          {isMobile && tags.length > 3 && (
+            <Badge variant="outline" className="text-xs">
+              +{tags.length - 3}
+            </Badge>
+          )}
+          <div className="flex items-center gap-1 md:gap-2">
             <Input
               value={newTag}
               onChange={(e) => setNewTag(e.target.value)}
               onKeyPress={(e) => e.key === "Enter" && addTag()}
               placeholder="Add tag..."
-              className="w-24 h-6 text-xs"
+              className="w-20 md:w-24 h-6 text-xs"
             />
             <Button size="sm" variant="ghost" onClick={addTag} className="h-6 px-2">
               <Hash className="h-3 w-3" />
@@ -450,46 +497,62 @@ export function MarkdownEditor({ noteId }: MarkdownEditorProps) {
         </div>
       </div>
 
-      {/* Toolbar - only show when editing a line */}
-      {editingLineIndex !== null && (
+      {/* Mobile Toolbar Toggle */}
+      {isMobile && editingLineIndex !== null && (
         <div className="p-2 border-b border-border">
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" onClick={() => setShowAIGenerator(true)}>
-              <Sparkles className="h-4 w-4" />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowToolbar(!showToolbar)}
+            className="w-full justify-between text-xs"
+          >
+            <span>Formatting Tools</span>
+            {showToolbar ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </Button>
+        </div>
+      )}
+
+      {/* Toolbar - responsive visibility */}
+      {editingLineIndex !== null && (!isMobile || showToolbar) && (
+        <div className="p-2 border-b border-border">
+          <div className="flex items-center gap-1 flex-wrap">
+            <Button variant="ghost" size="sm" onClick={() => setShowAIGenerator(true)} className="h-8 px-2">
+              <Sparkles className="h-3 w-3 md:h-4 md:w-4" />
+              {!isMobile && <span className="ml-1 text-xs">AI</span>}
             </Button>
             <Separator orientation="vertical" className="h-6 mx-1" />
-            <Button variant="ghost" size="sm" onClick={() => insertMarkdown("**bold**")}>
-              <Bold className="h-4 w-4" />
+            <Button variant="ghost" size="sm" onClick={() => insertMarkdown("**bold**")} className="h-8 px-2">
+              <Bold className="h-3 w-3 md:h-4 md:w-4" />
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => insertMarkdown("*italic*")}>
-              <Italic className="h-4 w-4" />
+            <Button variant="ghost" size="sm" onClick={() => insertMarkdown("*italic*")} className="h-8 px-2">
+              <Italic className="h-3 w-3 md:h-4 md:w-4" />
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => insertMarkdown("`code`")}>
-              <Code className="h-4 w-4" />
+            <Button variant="ghost" size="sm" onClick={() => insertMarkdown("`code`")} className="h-8 px-2">
+              <Code className="h-3 w-3 md:h-4 md:w-4" />
             </Button>
             <Separator orientation="vertical" className="h-6 mx-1" />
-            <Button variant="ghost" size="sm" onClick={() => insertMarkdown("# ")}>
-              <Type className="h-4 w-4" />
+            <Button variant="ghost" size="sm" onClick={() => insertMarkdown("# ")} className="h-8 px-2">
+              <Type className="h-3 w-3 md:h-4 md:w-4" />
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => insertMarkdown("- ")}>
-              <List className="h-4 w-4" />
+            <Button variant="ghost" size="sm" onClick={() => insertMarkdown("- ")} className="h-8 px-2">
+              <List className="h-3 w-3 md:h-4 md:w-4" />
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => insertMarkdown("> ")}>
-              <Quote className="h-4 w-4" />
+            <Button variant="ghost" size="sm" onClick={() => insertMarkdown("> ")} className="h-8 px-2">
+              <Quote className="h-3 w-3 md:h-4 md:w-4" />
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => insertMarkdown("[[]]")}>
-              <Link className="h-4 w-4" />
+            <Button variant="ghost" size="sm" onClick={() => insertMarkdown("[[]]")} className="h-8 px-2">
+              <Link className="h-3 w-3 md:h-4 md:w-4" />
             </Button>
           </div>
         </div>
       )}
 
       <div className="flex-1 flex overflow-hidden">
-        <div className={`${showLinkViz ? "w-2/3" : "w-full"} relative`}>
-          <div className="w-full h-full p-4 overflow-auto" ref={editorRef}>
+        <div className={`${showLinkViz && !isMobile ? "w-2/3" : "w-full"} relative`}>
+          <div className="w-full h-full p-3 md:p-4 overflow-auto" ref={editorRef}>
             {lines.length === 0 && (
               <div
-                className="text-muted-foreground italic cursor-text hover:bg-muted/20 transition-colors p-2 rounded"
+                className="text-muted-foreground italic cursor-text hover:bg-muted/20 transition-colors p-2 rounded text-sm md:text-base"
                 onClick={() => {
                   setLines([""])
                   setEditingLineIndex(0)
@@ -515,18 +578,18 @@ export function MarkdownEditor({ noteId }: MarkdownEditorProps) {
                   />
                 ) : (
                   <div
-                    className="cursor-text hover:bg-muted/20 transition-colors p-1 -m-1 rounded min-h-[1.5rem]"
+                    className="cursor-text hover:bg-muted/20 transition-colors p-1 -m-1 rounded min-h-[1.5rem] touch-manipulation"
                     onClick={(e) => handleLineClick(index, e)}
                   >
                     {line.trim() === "" ? (
                       <span className="text-muted-foreground/50">&nbsp;</span>
                     ) : editingCodeBlock && index >= editingCodeBlock.start && index <= editingCodeBlock.end ? (
-                      <div className="font-mono text-sm text-muted-foreground bg-muted/30 px-2 py-1 rounded">
+                      <div className="font-mono text-xs md:text-sm text-muted-foreground bg-muted/30 px-2 py-1 rounded overflow-x-auto">
                         {line}
                       </div>
                     ) : (
                       <div
-                        className="prose prose-sm max-w-none"
+                        className="prose prose-sm max-w-none [&>*]:text-sm md:[&>*]:text-base [&_pre]:overflow-x-auto [&_code]:text-xs md:[&_code]:text-sm"
                         dangerouslySetInnerHTML={{ __html: markdownToHtml(line) }}
                       />
                     )}
@@ -547,7 +610,8 @@ export function MarkdownEditor({ noteId }: MarkdownEditorProps) {
           )}
         </div>
 
-        {showLinkViz && (
+        {/* Link Visualization - hidden on mobile */}
+        {showLinkViz && !isMobile && (
           <div className="w-1/3 bg-muted/30 border-l border-border">
             <LinkVisualization
               currentNote={{ id: noteId, title }}

@@ -1,12 +1,11 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Sidebar } from "~/components/sidebar"
-import { NotesList } from "~/components/notes-list"
-import { MarkdownEditor } from "~/components/markdown-editor"
-import { Button } from "~/components/ui/button"
+import { Sidebar } from "@/components/sidebar"
+import { NotesList } from "@/components/notes-list"
+import { MarkdownEditor } from "@/components/markdown-editor"
+import { Button } from "@/components/ui/button"
 import { PanelLeftOpen, PanelLeftClose } from "lucide-react"
-import { initializeRAG } from "@/lib/rag-service"
 
 const mockNotes = [
   {
@@ -338,31 +337,34 @@ export default function HomePage() {
   const [selectedNote, setSelectedNote] = useState<string | null>(null)
 
   useEffect(() => {
-    const initRAG = async () => {
-      try {
-        await initializeRAG(mockNotes)
-        console.log("[RAG] System initialized successfully")
-      } catch (error) {
-        console.error("[RAG] Initialization failed:", error)
-      }
+    const checkMobile = () => {
+      setSidebarOpen(window.innerWidth >= 768)
     }
 
-    initRAG()
+    checkMobile()
+    window.addEventListener("resize", checkMobile)
+    return () => window.removeEventListener("resize", checkMobile)
   }, [])
 
   return (
     <div className="flex h-screen bg-background">
+      {sidebarOpen && (
+        <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+
       {/* Sidebar */}
       <div
-        className={`${sidebarOpen ? "w-80" : "w-0"} transition-all duration-300 overflow-hidden border-r border-border`}
+        className={`${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        } fixed md:relative z-50 md:z-auto w-80 md:w-80 h-full transition-transform duration-300 md:transition-all border-r border-border`}
       >
         <Sidebar onNoteSelect={setSelectedNote} selectedNote={selectedNote} />
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <div className="flex items-center gap-2 p-4 border-b border-border">
+        <div className="flex items-center gap-2 p-3 md:p-4 border-b border-border">
           <Button
             variant="ghost"
             size="sm"
@@ -371,7 +373,7 @@ export default function HomePage() {
           >
             {sidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
           </Button>
-          <h1 className="text-lg font-semibold">Markdown Editor</h1>
+          <h1 className="text-base md:text-lg font-semibold truncate">Markdown Editor</h1>
         </div>
 
         {/* Content Area */}

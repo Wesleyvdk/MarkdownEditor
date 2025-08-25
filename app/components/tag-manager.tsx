@@ -1,18 +1,18 @@
 "use client"
 
 import { useState } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "~/components/ui/dialog"
-import { Button } from "~/components/ui/button"
-import { Input } from "~/components/ui/input"
-import { Badge } from "~/components/ui/badge"
-import { ScrollArea } from "~/components/ui/scroll-area"
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card"
-import { Separator } from "~/components/ui/separator"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Separator } from "@/components/ui/separator"
 import { Hash, Plus, Trash2, Edit3, BarChart3, FileText, X, Check } from "lucide-react"
 
 interface TagManagerProps {
   tags: string[]
-  notes: Array<{ id: string; title: string; tags: string[] }>
+  notes: Array<{ id: string; title: string; tags: string[], lastModified: Date }>
   onClose: () => void
 }
 
@@ -198,7 +198,7 @@ export function TagManager({ tags, notes, onClose }: TagManagerProps) {
                         </div>
                         <div className="flex items-center justify-between text-xs text-muted-foreground">
                           <span>{tag.noteCount} notes</span>
-                          {tag.lastUsed && <span>Last used: {tag.lastUsed}</span>}
+                          {tag.lastUsed && <span>Last used: {tag.lastUsed.toString()}</span>}
                         </div>
                       </div>
                     ))}

@@ -1,13 +1,14 @@
 "use client"
 
 import { useState } from "react"
-import { Button } from "~/components/ui/button"
-import { Input } from "~/components/ui/input"
-import { Badge } from "~/components/ui/badge"
-import { ScrollArea } from "~/components/ui/scroll-area"
-import { TagManager } from "~/components/tag-manager"
-import { AISettings } from "~/components/ai-settings"
-import { AdminDashboard } from "~/components/admin-dashboard"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { TagManager } from "@/components/tag-manager"
+import { AISettings } from "@/components/ai-settings"
+import { AdminDashboard } from "@/components/admin-dashboard"
+import { GeneralSettings } from "@/components/general-settings"
 import { Search, FileText, Tag, Plus, Hash, Link2, Settings, ArrowRight, Filter, X, Brain, Shield } from "lucide-react"
 
 interface SidebarProps {
@@ -51,6 +52,7 @@ export function Sidebar({ onNoteSelect, selectedNote }: SidebarProps) {
   const [showTagManager, setShowTagManager] = useState(false)
   const [showAISettings, setShowAISettings] = useState(false)
   const [showAdminDashboard, setShowAdminDashboard] = useState(false)
+  const [showGeneralSettings, setShowGeneralSettings] = useState(false)
 
   const filteredNotes = mockNotes.filter((note) => {
     const matchesSearch =
@@ -86,14 +88,14 @@ export function Sidebar({ onNoteSelect, selectedNote }: SidebarProps) {
   return (
     <div className="h-full bg-sidebar border-r border-sidebar-border flex flex-col">
       {/* Search */}
-      <div className="p-4 border-b border-sidebar-border">
+      <div className="p-3 md:p-4 border-b border-sidebar-border">
         <div className="relative mb-3">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search notes and tags..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 search-input"
+            className="pl-10 search-input text-sm"
           />
         </div>
 
@@ -123,12 +125,12 @@ export function Sidebar({ onNoteSelect, selectedNote }: SidebarProps) {
           variant={activeTab === "notes" ? "secondary" : "ghost"}
           size="sm"
           onClick={() => setActiveTab("notes")}
-          className="flex-1 rounded-none"
+          className="flex-1 rounded-none text-xs md:text-sm px-2"
         >
-          <FileText className="h-4 w-4 mr-2" />
-          Notes
+          <FileText className="h-3 w-3 md:h-4 md:w-4 mr-1 md:mr-2" />
+          <span className="hidden sm:inline">Notes</span>
           {selectedTags.length > 0 && (
-            <Badge variant="outline" className="ml-2 text-xs">
+            <Badge variant="outline" className="ml-1 md:ml-2 text-xs">
               {filteredNotes.length}
             </Badge>
           )}
@@ -137,25 +139,25 @@ export function Sidebar({ onNoteSelect, selectedNote }: SidebarProps) {
           variant={activeTab === "tags" ? "secondary" : "ghost"}
           size="sm"
           onClick={() => setActiveTab("tags")}
-          className="flex-1 rounded-none"
+          className="flex-1 rounded-none text-xs md:text-sm px-2"
         >
-          <Tag className="h-4 w-4 mr-2" />
-          Tags
+          <Tag className="h-3 w-3 md:h-4 md:w-4 mr-1 md:mr-2" />
+          <span className="hidden sm:inline">Tags</span>
         </Button>
         <Button
           variant={activeTab === "links" ? "secondary" : "ghost"}
           size="sm"
           onClick={() => setActiveTab("links")}
-          className="flex-1 rounded-none"
+          className="flex-1 rounded-none text-xs md:text-sm px-2"
         >
-          <Link2 className="h-4 w-4 mr-2" />
-          Links
+          <Link2 className="h-3 w-3 md:h-4 md:w-4 mr-1 md:mr-2" />
+          <span className="hidden sm:inline">Links</span>
         </Button>
       </div>
 
       {/* Content */}
       <ScrollArea className="flex-1">
-        <div className="p-4">
+        <div className="p-3 md:p-4">
           {activeTab === "notes" && (
             <div className="space-y-2">
               <div className="flex items-center justify-between mb-4">
@@ -170,15 +172,15 @@ export function Sidebar({ onNoteSelect, selectedNote }: SidebarProps) {
                 <div
                   key={note.id}
                   onClick={() => onNoteSelect(note.id)}
-                  className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                  className={`p-2 md:p-3 rounded-lg cursor-pointer transition-colors ${
                     selectedNote === note.id
                       ? "bg-sidebar-accent text-sidebar-accent-foreground"
                       : "hover:bg-sidebar-primary"
                   }`}
                 >
-                  <div className="font-medium text-sm mb-1">{note.title}</div>
+                  <div className="font-medium text-sm mb-1 truncate">{note.title}</div>
                   <div className="flex flex-wrap gap-1 mb-2">
-                    {note.tags.map((tag) => (
+                    {note.tags.slice(0, 3).map((tag) => (
                       <Badge
                         key={tag}
                         variant={selectedTags.includes(tag) ? "default" : "secondary"}
@@ -191,6 +193,11 @@ export function Sidebar({ onNoteSelect, selectedNote }: SidebarProps) {
                         {tag}
                       </Badge>
                     ))}
+                    {note.tags.length > 3 && (
+                      <Badge variant="outline" className="text-xs">
+                        +{note.tags.length - 3}
+                      </Badge>
+                    )}
                   </div>
                   <div className="text-xs text-muted-foreground">{note.lastModified}</div>
                 </div>
@@ -293,24 +300,43 @@ export function Sidebar({ onNoteSelect, selectedNote }: SidebarProps) {
       </ScrollArea>
 
       {/* Settings */}
-      <div className="p-4 border-t border-sidebar-border space-y-2">
-        <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => setShowAISettings(true)}>
+      <div className="p-3 md:p-4 border-t border-sidebar-border space-y-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start text-xs md:text-sm"
+          onClick={() => setShowAISettings(true)}
+        >
           <Brain className="h-4 w-4 mr-2" />
-          AI Settings
+          <span className="hidden sm:inline">AI Settings</span>
+          <span className="sm:hidden">AI</span>
         </Button>
-        <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => setShowAdminDashboard(true)}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start text-xs md:text-sm"
+          onClick={() => setShowAdminDashboard(true)}
+        >
           <Shield className="h-4 w-4 mr-2" />
-          Admin Dashboard
+          <span className="hidden sm:inline">Admin Dashboard</span>
+          <span className="sm:hidden">Admin</span>
         </Button>
-        <Button variant="ghost" size="sm" className="w-full justify-start">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start text-xs md:text-sm"
+          onClick={() => setShowGeneralSettings(true)}
+        >
           <Settings className="h-4 w-4 mr-2" />
-          Settings
+          <span className="hidden sm:inline">Settings</span>
+          <span className="sm:hidden">Settings</span>
         </Button>
       </div>
 
       {showTagManager && <TagManager tags={mockTags} notes={mockNotes} onClose={() => setShowTagManager(false)} />}
       {showAISettings && <AISettings onClose={() => setShowAISettings(false)} />}
       {showAdminDashboard && <AdminDashboard onClose={() => setShowAdminDashboard(false)} />}
+      {showGeneralSettings && <GeneralSettings onClose={() => setShowGeneralSettings(false)} />}
     </div>
   )
 }
