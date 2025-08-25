@@ -2,13 +2,14 @@
 
 import type React from "react"
 import { useState, useRef, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { LinkAutocomplete } from "@/components/link-autocomplete"
-import { LinkVisualization } from "@/components/link-visualization"
-import { Save, Network, Type, Bold, Italic, Link, List, Quote, Code, Hash } from "lucide-react"
+import { Button } from "~/components/ui/button"
+import { Input } from "~/components/ui/input"
+import { Badge } from "~/components/ui/badge"
+import { Separator } from "~/components/ui/separator"
+import { LinkAutocomplete } from "~/components/link-autocomplete"
+import { LinkVisualization } from "~/components/link-visualization"
+import { AIDocumentGenerator } from "~/components/ai-document-generator"
+import { Save, Network, Type, Bold, Italic, Link, List, Quote, Code, Hash, Brain, Sparkles } from "lucide-react"
 
 interface MarkdownEditorProps {
   noteId: string
@@ -60,11 +61,11 @@ Happy writing!`,
 
 // Mock notes for linking
 const mockNotes = [
-  { id: "1", title: "Getting Started" },
-  { id: "2", title: "Project Ideas" },
-  { id: "3", title: "Meeting Notes" },
-  { id: "4", title: "Daily Journal" },
-  { id: "5", title: "Research Notes" },
+  { id: "1", title: "Getting Started", content: mockNote.content },
+  { id: "2", title: "Project Ideas", content: "# Project Ideas\n\nList of potential projects..." },
+  { id: "3", title: "Meeting Notes", content: "# Meeting Notes\n\nNotes from recent meetings..." },
+  { id: "4", title: "Daily Journal", content: "# Daily Journal\n\nDaily thoughts and reflections..." },
+  { id: "5", title: "Research Notes", content: "# Research Notes\n\nResearch findings and references..." },
 ]
 
 export function MarkdownEditor({ noteId }: MarkdownEditorProps) {
@@ -72,6 +73,7 @@ export function MarkdownEditor({ noteId }: MarkdownEditorProps) {
   const [content, setContent] = useState(mockNote.content)
   const [tags, setTags] = useState(mockNote.tags)
   const [showLinkViz, setShowLinkViz] = useState(false)
+  const [showAIGenerator, setShowAIGenerator] = useState(false)
   const [newTag, setNewTag] = useState("")
   const [autocompletePosition, setAutocompletePosition] = useState<{ x: number; y: number } | null>(null)
   const [autocompleteQuery, setAutocompleteQuery] = useState("")
@@ -163,13 +165,13 @@ export function MarkdownEditor({ noteId }: MarkdownEditorProps) {
           .replace(/([a-zA-Z-]+)(?=\s*:)/g, '<span class="token property">$1</span>')
           .replace(/(["'`])((?:\\.|(?!\1)[^\\])*?)\1/g, '<span class="token string">$1$2$1</span>')
           .replace(/\b(\d+(?:px|em|rem|%|vh|vw|deg)?)\b/g, '<span class="token number">$1</span>')
-          .replace(/(\/\*[\s\S]*?--&gt;)/g, '<span class="token comment">$1</span>')
+          .replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="token comment">$1</span>')
           .replace(/([{}();,:])/g, '<span class="token punctuation">$1</span>')
       } else if (lang === "html" || lang === "xml") {
         return line
-          .replace(/(&lt;\/?[a-zA-Z][^&gt;]*&gt;)/g, '<span class="token keyword">$1</span>')
+          .replace(/(<\/?[a-zA-Z][^>]*>)/g, '<span class="token keyword">$1</span>')
           .replace(/(["'`])((?:\\.|(?!\1)[^\\])*?)\1/g, '<span class="token string">$1$2$1</span>')
-          .replace(/(&lt;!--[\s\S]*?--&gt;)/g, '<span class="token comment">$1</span>')
+          .replace(/(<!--[\s\S]*?-->)/g, '<span class="token comment">$1</span>')
       }
       return line
     }
@@ -390,6 +392,13 @@ export function MarkdownEditor({ noteId }: MarkdownEditorProps) {
     }, 0)
   }
 
+  const handleAIGenerate = (generatedContent: string, generatedTitle: string) => {
+    setContent(generatedContent)
+    setTitle(generatedTitle)
+    setLines(generatedContent.split("\n"))
+    setShowAIGenerator(false)
+  }
+
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
@@ -402,6 +411,9 @@ export function MarkdownEditor({ noteId }: MarkdownEditorProps) {
             placeholder="Note title..."
           />
           <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setShowAIGenerator(true)}>
+              <Brain className="h-4 w-4" />
+            </Button>
             <Button variant="ghost" size="sm">
               <Save className="h-4 w-4" />
             </Button>
@@ -442,6 +454,10 @@ export function MarkdownEditor({ noteId }: MarkdownEditorProps) {
       {editingLineIndex !== null && (
         <div className="p-2 border-b border-border">
           <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" onClick={() => setShowAIGenerator(true)}>
+              <Sparkles className="h-4 w-4" />
+            </Button>
+            <Separator orientation="vertical" className="h-6 mx-1" />
             <Button variant="ghost" size="sm" onClick={() => insertMarkdown("**bold**")}>
               <Bold className="h-4 w-4" />
             </Button>
@@ -541,6 +557,17 @@ export function MarkdownEditor({ noteId }: MarkdownEditorProps) {
           </div>
         )}
       </div>
+
+      {/* AI Document Generator modal */}
+      {showAIGenerator && (
+        <AIDocumentGenerator
+          onGenerate={handleAIGenerate}
+          onClose={() => setShowAIGenerator(false)}
+          currentContent={content}
+          currentTitle={title}
+          relatedNotes={mockNotes}
+        />
+      )}
     </div>
   )
 }

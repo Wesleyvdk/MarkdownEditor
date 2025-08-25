@@ -1,12 +1,14 @@
 "use client"
 
 import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { TagManager } from "@/components/tag-manager"
-import { Search, FileText, Tag, Plus, Hash, Link2, Settings, ArrowRight, Filter, X } from "lucide-react"
+import { Button } from "~/components/ui/button"
+import { Input } from "~/components/ui/input"
+import { Badge } from "~/components/ui/badge"
+import { ScrollArea } from "~/components/ui/scroll-area"
+import { TagManager } from "~/components/tag-manager"
+import { AISettings } from "~/components/ai-settings"
+import { AdminDashboard } from "~/components/admin-dashboard"
+import { Search, FileText, Tag, Plus, Hash, Link2, Settings, ArrowRight, Filter, X, Brain, Shield } from "lucide-react"
 
 interface SidebarProps {
   onNoteSelect: (noteId: string) => void
@@ -47,6 +49,8 @@ export function Sidebar({ onNoteSelect, selectedNote }: SidebarProps) {
   const [activeTab, setActiveTab] = useState<"notes" | "tags" | "links">("notes")
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [showTagManager, setShowTagManager] = useState(false)
+  const [showAISettings, setShowAISettings] = useState(false)
+  const [showAdminDashboard, setShowAdminDashboard] = useState(false)
 
   const filteredNotes = mockNotes.filter((note) => {
     const matchesSearch =
@@ -289,7 +293,15 @@ export function Sidebar({ onNoteSelect, selectedNote }: SidebarProps) {
       </ScrollArea>
 
       {/* Settings */}
-      <div className="p-4 border-t border-sidebar-border">
+      <div className="p-4 border-t border-sidebar-border space-y-2">
+        <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => setShowAISettings(true)}>
+          <Brain className="h-4 w-4 mr-2" />
+          AI Settings
+        </Button>
+        <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => setShowAdminDashboard(true)}>
+          <Shield className="h-4 w-4 mr-2" />
+          Admin Dashboard
+        </Button>
         <Button variant="ghost" size="sm" className="w-full justify-start">
           <Settings className="h-4 w-4 mr-2" />
           Settings
@@ -297,6 +309,8 @@ export function Sidebar({ onNoteSelect, selectedNote }: SidebarProps) {
       </div>
 
       {showTagManager && <TagManager tags={mockTags} notes={mockNotes} onClose={() => setShowTagManager(false)} />}
+      {showAISettings && <AISettings onClose={() => setShowAISettings(false)} />}
+      {showAdminDashboard && <AdminDashboard onClose={() => setShowAdminDashboard(false)} />}
     </div>
   )
 }
