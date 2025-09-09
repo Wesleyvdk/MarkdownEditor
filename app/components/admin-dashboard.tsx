@@ -568,9 +568,8 @@ export function AdminDashboard({ onClose }: AdminDashboardProps) {
                             {mockLogs.map((log, index) => (
                               <div
                                 key={log.id}
-                                className={`p-4 border-b border-border last:border-b-0 ${
-                                  log.level === "ERROR" ? "bg-red-500/5" : log.level === "WARN" ? "bg-yellow-500/5" : ""
-                                }`}
+                                className={`p-4 border-b border-border last:border-b-0 ${log.level === "ERROR" ? "bg-red-500/5" : log.level === "WARN" ? "bg-yellow-500/5" : ""
+                                  }`}
                               >
                                 <div className="flex items-center gap-4 text-sm">
                                   <span className="text-muted-foreground font-mono">{log.timestamp}</span>

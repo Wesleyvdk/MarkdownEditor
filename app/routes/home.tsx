@@ -354,9 +354,8 @@ export default function HomePage() {
 
       {/* Sidebar */}
       <div
-        className={`${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        } fixed md:relative z-50 md:z-auto w-80 md:w-80 h-full transition-transform duration-300 md:transition-all border-r border-border`}
+        className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          } fixed md:relative z-50 md:z-auto w-80 md:w-80 h-full transition-transform duration-300 md:transition-all border-r border-border`}
       >
         <Sidebar onNoteSelect={setSelectedNote} selectedNote={selectedNote} />
       </div>
