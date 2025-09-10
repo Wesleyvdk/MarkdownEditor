@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Sidebar } from "@/components/sidebar"
 import { NotesList } from "@/components/notes-list"
 import { MarkdownEditor } from "@/components/markdown-editor"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
 import { PanelLeftOpen, PanelLeftClose } from "lucide-react"
 
@@ -373,6 +374,9 @@ export default function HomePage() {
             {sidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
           </Button>
           <h1 className="text-base md:text-lg font-semibold truncate">Markdown Editor</h1>
+          <div className="ml-auto">
+            <ThemeToggle />
+          </div>
         </div>
 
         {/* Content Area */}

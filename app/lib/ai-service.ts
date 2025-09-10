@@ -3,6 +3,32 @@ interface AIProvider {
   type: "local" | "cloud"
   models: string[]
   requiresApiKey: boolean
+  baseUrl?: string
+}
+
+interface OllamaModel {
+  name: string
+  model: string
+  modified_at: string
+  size: number
+  digest: string
+  details?: {
+    parent_model?: string
+    format?: string
+    family?: string
+    families?: string[]
+    parameter_size?: string
+    quantization_level?: string
+  }
+}
+
+interface OllamaModelInfo {
+  name: string
+  size: string
+  status: "downloaded" | "available" | "downloading"
+  progress?: number
+  digest?: string
+  modified_at?: string
 }
 
 interface AIConfig {
@@ -26,8 +52,9 @@ export const AI_PROVIDERS: Record<string, AIProvider> = {
   ollama: {
     name: "Ollama",
     type: "local",
-    models: ["llama3.2", "codellama", "mistral", "phi3", "gemma2"],
+    models: [], // Will be populated dynamically
     requiresApiKey: false,
+    baseUrl: "http://localhost:11434",
   },
   openai: {
     name: "OpenAI",
@@ -277,32 +304,54 @@ class AIService {
     return prompt
   }
 
-  async testConnection(): Promise<boolean> {
+  async testConnection(): Promise<{ connected: boolean; version?: string; error?: string }> {
     try {
       switch (this.config.provider) {
         case "ollama":
-          const response = await fetch(`${this.config.baseUrl}/api/tags`)
-          return response.ok
+          return await this.checkOllamaConnection()
         case "openai":
+          if (!this.config.apiKey) {
+            return { connected: false, error: "API key required" }
+          }
           const openaiResponse = await fetch("https://api.openai.com/v1/models", {
             headers: { Authorization: `Bearer ${this.config.apiKey}` },
           })
-          return openaiResponse.ok
+          if (openaiResponse.ok) {
+            return { connected: true }
+          } else {
+            return { connected: false, error: `HTTP ${openaiResponse.status}: ${openaiResponse.statusText}` }
+          }
         case "anthropic":
-          // Anthropic doesn't have a simple health check, so we'll try a minimal request
-          return !!this.config.apiKey
+          if (!this.config.apiKey) {
+            return { connected: false, error: "API key required" }
+          }
+          // Anthropic doesn't have a simple health check endpoint
+          return { connected: true }
         case "groq":
+          if (!this.config.apiKey) {
+            return { connected: false, error: "API key required" }
+          }
           const groqResponse = await fetch("https://api.groq.com/openai/v1/models", {
             headers: { Authorization: `Bearer ${this.config.apiKey}` },
           })
-          return groqResponse.ok
+          if (groqResponse.ok) {
+            return { connected: true }
+          } else {
+            return { connected: false, error: `HTTP ${groqResponse.status}: ${groqResponse.statusText}` }
+          }
         case "gemini":
-          return !!this.config.apiKey
+          if (!this.config.apiKey) {
+            return { connected: false, error: "API key required" }
+          }
+          return { connected: true }
         default:
-          return false
+          return { connected: false, error: "Unknown provider" }
       }
-    } catch {
-      return false
+    } catch (error) {
+      return { 
+        connected: false, 
+        error: error instanceof Error ? error.message : "Connection failed" 
+      }
     }
   }
 
@@ -315,16 +364,131 @@ class AIService {
         const response = await fetch(`${this.config.baseUrl}/api/tags`)
         if (response.ok) {
           const data = await response.json()
-          return data.models?.map((model: any) => model.name) || []
+          const models = data.models?.map((model: OllamaModel) => model.name) || []
+          // Update the provider's models cache
+          AI_PROVIDERS[this.config.provider].models = models
+          return models
         }
-      } catch {
-        // Fall back to default models
+      } catch (error) {
+        console.error("Failed to fetch Ollama models:", error)
       }
     }
 
     return provider.models
   }
+
+  async getOllamaModels(): Promise<OllamaModelInfo[]> {
+    try {
+      const response = await fetch(`${this.config.baseUrl}/api/tags`)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch models: ${response.statusText}`)
+      }
+      
+      const data = await response.json()
+      return data.models?.map((model: OllamaModel) => ({
+        name: model.name,
+        size: this.formatBytes(model.size),
+        status: "downloaded" as const,
+        digest: model.digest,
+        modified_at: model.modified_at
+      })) || []
+    } catch (error) {
+      console.error("Failed to fetch Ollama models:", error)
+      return []
+    }
+  }
+
+  async getOllamaLibraryModels(): Promise<OllamaModelInfo[]> {
+    // Popular models available in Ollama library
+    const libraryModels = [
+      { name: "llama3.2:latest", size: "2.0GB" },
+      { name: "llama3.2:3b", size: "2.0GB" },
+      { name: "llama3.1:latest", size: "4.7GB" },
+      { name: "llama3.1:8b", size: "4.7GB" },
+      { name: "llama3.1:70b", size: "40GB" },
+      { name: "codellama:latest", size: "3.8GB" },
+      { name: "codellama:7b", size: "3.8GB" },
+      { name: "codellama:13b", size: "7.3GB" },
+      { name: "mistral:latest", size: "4.1GB" },
+      { name: "mistral:7b", size: "4.1GB" },
+      { name: "phi3:latest", size: "2.3GB" },
+      { name: "phi3:mini", size: "2.3GB" },
+      { name: "gemma2:latest", size: "5.4GB" },
+      { name: "gemma2:9b", size: "5.4GB" },
+      { name: "qwen2.5:latest", size: "4.4GB" },
+      { name: "deepseek-coder:latest", size: "3.8GB" },
+      { name: "nomic-embed-text:latest", size: "274MB" },
+    ]
+
+    const downloadedModels = await this.getOllamaModels()
+    const downloadedNames = new Set(downloadedModels.map(m => m.name))
+
+    return libraryModels.map(model => ({
+      name: model.name,
+      size: model.size,
+      status: downloadedNames.has(model.name) ? "downloaded" as const : "available" as const
+    }))
+  }
+
+  async downloadOllamaModel(modelName: string): Promise<ReadableStream<Uint8Array> | null> {
+    try {
+      const response = await fetch(`${this.config.baseUrl}/api/pull`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: modelName, stream: true })
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to download model: ${response.statusText}`)
+      }
+
+      return response.body
+    } catch (error) {
+      console.error("Failed to download model:", error)
+      return null
+    }
+  }
+
+  async deleteOllamaModel(modelName: string): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.config.baseUrl}/api/delete`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: modelName })
+      })
+
+      return response.ok
+    } catch (error) {
+      console.error("Failed to delete model:", error)
+      return false
+    }
+  }
+
+  async checkOllamaConnection(): Promise<{ connected: boolean; version?: string; error?: string }> {
+    try {
+      const response = await fetch(`${this.config.baseUrl}/api/version`)
+      if (response.ok) {
+        const data = await response.json()
+        return { connected: true, version: data.version }
+      } else {
+        return { connected: false, error: `HTTP ${response.status}: ${response.statusText}` }
+      }
+    } catch (error) {
+      return { 
+        connected: false, 
+        error: error instanceof Error ? error.message : "Connection failed" 
+      }
+    }
+  }
+
+  private formatBytes(bytes: number): string {
+    if (bytes === 0) return "0 Bytes"
+    const k = 1024
+    const sizes = ["Bytes", "KB", "MB", "GB", "TB"]
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i]
+  }
 }
 
 export const aiService = new AIService()
-export type { AIConfig, GenerateOptions }
+export type { AIConfig, GenerateOptions, OllamaModelInfo }

@@ -24,7 +24,7 @@ import {
   Cloud,
   Monitor,
 } from "lucide-react"
-import { aiService, AI_PROVIDERS, type AIConfig } from "@/lib/ai-service"
+import { aiService, AI_PROVIDERS, type AIConfig, type OllamaModelInfo } from "../lib/ai-service"
 
 interface AISettingsProps {
   onClose: () => void
@@ -34,18 +34,18 @@ export function AISettings({ onClose }: AISettingsProps) {
   const [config, setConfig] = useState<AIConfig>(aiService.getConfig())
   const [enableRAG, setEnableRAG] = useState(true)
   const [ragTemplate, setRagTemplate] = useState("")
-  const [isConnected, setIsConnected] = useState(false)
+  const [connectionStatus, setConnectionStatus] = useState<{ connected: boolean; version?: string; error?: string }>({ connected: false })
   const [availableModels, setAvailableModels] = useState<string[]>([])
   const [isTestingConnection, setIsTestingConnection] = useState(false)
-
-  const [ollamaModels, setOllamaModels] = useState([
-    { name: "llama3.2", size: "3.2GB", status: "downloaded" as const },
-    { name: "codellama", size: "3.8GB", status: "available" as const },
-    { name: "mistral", size: "4.1GB", status: "downloading" as const, progress: 65 },
-  ])
+  const [ollamaModels, setOllamaModels] = useState<OllamaModelInfo[]>([])
+  const [loadingModels, setLoadingModels] = useState(false)
+  const [downloadingModels, setDownloadingModels] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     loadAvailableModels()
+    if (config.provider === "ollama") {
+      loadOllamaModels()
+    }
   }, [config.provider])
 
   const loadAvailableModels = async () => {
@@ -54,6 +54,18 @@ export function AISettings({ onClose }: AISettingsProps) {
       setAvailableModels(models)
     } catch (error) {
       console.error("Failed to load models:", error)
+    }
+  }
+
+  const loadOllamaModels = async () => {
+    setLoadingModels(true)
+    try {
+      const models = await aiService.getOllamaLibraryModels()
+      setOllamaModels(models)
+    } catch (error) {
+      console.error("Failed to load Ollama models:", error)
+    } finally {
+      setLoadingModels(false)
     }
   }
 
@@ -66,31 +78,99 @@ export function AISettings({ onClose }: AISettingsProps) {
   const handleTestConnection = async () => {
     setIsTestingConnection(true)
     try {
-      const connected = await aiService.testConnection()
-      setIsConnected(connected)
+      const result = await aiService.testConnection()
+      setConnectionStatus(result)
     } catch (error) {
-      setIsConnected(false)
+      setConnectionStatus({ connected: false, error: "Connection failed" })
     } finally {
       setIsTestingConnection(false)
     }
   }
 
-  const handleDownloadModel = (modelName: string) => {
+  const handleDownloadModel = async (modelName: string) => {
+    setDownloadingModels(prev => new Set(prev.add(modelName)))
     setOllamaModels((prev) =>
       prev.map((model) => (model.name === modelName ? { ...model, status: "downloading", progress: 0 } : model)),
     )
+
+    try {
+      const stream = await aiService.downloadOllamaModel(modelName)
+      if (stream) {
+        const reader = stream.getReader()
+        const decoder = new TextDecoder()
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+
+            const chunk = decoder.decode(value, { stream: true })
+            const lines = chunk.split('\n').filter(line => line.trim())
+            
+            for (const line of lines) {
+              try {
+                const data = JSON.parse(line)
+                if (data.status === 'downloading' && data.completed && data.total) {
+                  const progress = Math.round((data.completed / data.total) * 100)
+                  setOllamaModels((prev) =>
+                    prev.map((model) => 
+                      model.name === modelName 
+                        ? { ...model, status: "downloading", progress } 
+                        : model
+                    )
+                  )
+                } else if (data.status === 'success') {
+                  setOllamaModels((prev) =>
+                    prev.map((model) => 
+                      model.name === modelName 
+                        ? { ...model, status: "downloaded", progress: undefined } 
+                        : model
+                    )
+                  )
+                  break
+                }
+              } catch (parseError) {
+                // Ignore parsing errors for individual lines
+              }
+            }
+          }
+        } finally {
+          reader.releaseLock()
+        }
+      }
+    } catch (error) {
+      console.error("Failed to download model:", error)
+      setOllamaModels((prev) =>
+        prev.map((model) => (model.name === modelName ? { ...model, status: "available", progress: undefined } : model)),
+      )
+    } finally {
+      setDownloadingModels(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(modelName)
+        return newSet
+      })
+    }
   }
 
-  const handleDeleteModel = (modelName: string) => {
-    setOllamaModels((prev) =>
-      prev.map((model) => (model.name === modelName ? { ...model, status: "available" } : model)),
-    )
+  const handleDeleteModel = async (modelName: string) => {
+    try {
+      const success = await aiService.deleteOllamaModel(modelName)
+      if (success) {
+        setOllamaModels((prev) =>
+          prev.map((model) => (model.name === modelName ? { ...model, status: "available" } : model)),
+        )
+        // Reload available models for the dropdown
+        loadAvailableModels()
+      }
+    } catch (error) {
+      console.error("Failed to delete model:", error)
+    }
   }
 
   const currentProvider = AI_PROVIDERS[config.provider]
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
       <div className="bg-background border border-border rounded-lg w-full max-w-4xl h-[80vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-border">
@@ -131,6 +211,10 @@ export function AISettings({ onClose }: AISettingsProps) {
                 <TabsTrigger value="connections" className="w-full justify-start">
                   <Server className="h-4 w-4 mr-2" />
                   Connections
+                </TabsTrigger>
+                <TabsTrigger value="advanced" className="w-full justify-start">
+                  <Monitor className="h-4 w-4 mr-2" />
+                  Advanced
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -177,7 +261,12 @@ export function AISettings({ onClose }: AISettingsProps) {
                                   </Badge>
                                 </div>
                                 <p className="text-sm text-muted-foreground">
-                                  {provider.models.length} models available
+                                  {key === "ollama" 
+                                    ? `${availableModels.length} models downloaded` 
+                                    : provider.requiresApiKey 
+                                      ? "API key required"
+                                      : `${provider.models.length} models available`
+                                  }
                                 </p>
                               </div>
                             ))}
@@ -196,11 +285,19 @@ export function AISettings({ onClose }: AISettingsProps) {
                                     <SelectValue placeholder="Select a model" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {currentProvider?.models.map((model) => (
-                                      <SelectItem key={model} value={model}>
-                                        {model}
-                                      </SelectItem>
-                                    ))}
+                                    {config.provider === "ollama" ? (
+                                      availableModels.map((model) => (
+                                        <SelectItem key={model} value={model}>
+                                          {model}
+                                        </SelectItem>
+                                      ))
+                                    ) : (
+                                      currentProvider?.models.map((model) => (
+                                        <SelectItem key={model} value={model}>
+                                          {model}
+                                        </SelectItem>
+                                      ))
+                                    )}
                                   </SelectContent>
                                 </Select>
                               </div>
@@ -259,15 +356,34 @@ export function AISettings({ onClose }: AISettingsProps) {
                             </div>
 
                             {/* Connection Test */}
-                            <div className="flex items-center gap-2">
-                              <Button onClick={handleTestConnection} disabled={isTestingConnection}>
-                                {isTestingConnection ? "Testing..." : "Test Connection"}
-                              </Button>
-                              {isConnected && (
-                                <div className="flex items-center gap-2 text-green-500">
-                                  <Check className="h-4 w-4" />
-                                  <span className="text-sm">Connected</span>
-                                </div>
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <Button onClick={handleTestConnection} disabled={isTestingConnection}>
+                                  {isTestingConnection ? "Testing..." : "Test Connection"}
+                                </Button>
+                                {connectionStatus.connected ? (
+                                  <div className="flex items-center gap-2 text-green-500">
+                                    <Check className="h-4 w-4" />
+                                    <span className="text-sm">
+                                      Connected{connectionStatus.version && ` (v${connectionStatus.version})`}
+                                    </span>
+                                  </div>
+                                ) : connectionStatus.error ? (
+                                  <div className="flex items-center gap-2 text-red-500">
+                                    <AlertCircle className="h-4 w-4" />
+                                    <span className="text-sm">{connectionStatus.error}</span>
+                                  </div>
+                                ) : null}
+                              </div>
+                              {config.provider === "ollama" && (
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  onClick={loadOllamaModels}
+                                  disabled={loadingModels}
+                                >
+                                  {loadingModels ? "Refreshing..." : "Refresh Models"}
+                                </Button>
                               )}
                             </div>
                           </div>
@@ -288,8 +404,13 @@ export function AISettings({ onClose }: AISettingsProps) {
                             <CardDescription>Download and manage local Ollama models</CardDescription>
                           </CardHeader>
                           <CardContent>
-                            <div className="space-y-4">
-                              {ollamaModels.map((model) => (
+                            {loadingModels ? (
+                              <div className="flex items-center justify-center py-8">
+                                <div className="text-sm text-muted-foreground">Loading models...</div>
+                              </div>
+                            ) : (
+                              <div className="space-y-4">
+                                {ollamaModels.map((model) => (
                                 <div
                                   key={model.name}
                                   className="flex items-center justify-between p-4 border border-border rounded-lg"
@@ -344,8 +465,9 @@ export function AISettings({ onClose }: AISettingsProps) {
                                     )}
                                   </div>
                                 </div>
-                              ))}
-                            </div>
+                                ))}
+                              </div>
+                            )}
                           </CardContent>
                         </Card>
                       ) : (
@@ -490,6 +612,177 @@ export function AISettings({ onClose }: AISettingsProps) {
                     </div>
                   </TabsContent>
 
+                  {/* Advanced Tab */}
+                  <TabsContent value="advanced" className="mt-0">
+                    <div className="space-y-6">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2">
+                            <Brain className="h-5 w-5" />
+                            Advanced AI Configuration
+                          </CardTitle>
+                          <CardDescription>Fine-tune AI behavior and performance settings</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                          {/* Model Parameters */}
+                          <div>
+                            <h4 className="text-sm font-medium mb-4">Model Parameters</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="temperature">Temperature ({config.temperature})</Label>
+                                <input
+                                  id="temperature"
+                                  type="range"
+                                  min="0"
+                                  max="2"
+                                  step="0.1"
+                                  value={config.temperature || 0.7}
+                                  onChange={(e) => handleConfigChange("temperature", Number.parseFloat(e.target.value))}
+                                  className="w-full"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                  Controls randomness. Lower = more focused, Higher = more creative
+                                </p>
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="max-tokens">Max Tokens ({config.maxTokens})</Label>
+                                <input
+                                  id="max-tokens"
+                                  type="range"
+                                  min="256"
+                                  max="8192"
+                                  step="256"
+                                  value={config.maxTokens || 2048}
+                                  onChange={(e) => handleConfigChange("maxTokens", Number.parseInt(e.target.value))}
+                                  className="w-full"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                  Maximum length of the AI response
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Ollama-specific settings */}
+                          {config.provider === "ollama" && (
+                            <div>
+                              <h4 className="text-sm font-medium mb-4">Ollama Configuration</h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                  <Label htmlFor="keep-alive">Keep Alive (minutes)</Label>
+                                  <Input
+                                    id="keep-alive"
+                                    type="number"
+                                    min="0"
+                                    max="120"
+                                    defaultValue="5"
+                                    placeholder="5"
+                                  />
+                                  <p className="text-xs text-muted-foreground">
+                                    How long to keep model loaded in memory
+                                  </p>
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor="num-predict">Prediction Length</Label>
+                                  <Input
+                                    id="num-predict"
+                                    type="number"
+                                    min="-1"
+                                    max="4096"
+                                    defaultValue="-1"
+                                    placeholder="-1 (unlimited)"
+                                  />
+                                  <p className="text-xs text-muted-foreground">
+                                    Maximum tokens to predict (-1 for unlimited)
+                                  </p>
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor="repeat-penalty">Repeat Penalty</Label>
+                                  <input
+                                    id="repeat-penalty"
+                                    type="range"
+                                    min="0.5"
+                                    max="2.0"
+                                    step="0.1"
+                                    defaultValue="1.1"
+                                    className="w-full"
+                                  />
+                                  <p className="text-xs text-muted-foreground">
+                                    Penalize repetitive text (1.0 = no penalty)
+                                  </p>
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor="top-k">Top K</Label>
+                                  <Input
+                                    id="top-k"
+                                    type="number"
+                                    min="1"
+                                    max="100"
+                                    defaultValue="40"
+                                    placeholder="40"
+                                  />
+                                  <p className="text-xs text-muted-foreground">
+                                    Limit the next token selection to K most likely
+                                  </p>
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor="top-p">Top P</Label>
+                                  <input
+                                    id="top-p"
+                                    type="range"
+                                    min="0.1"
+                                    max="1.0"
+                                    step="0.1"
+                                    defaultValue="0.9"
+                                    className="w-full"
+                                  />
+                                  <p className="text-xs text-muted-foreground">
+                                    Cumulative probability cutoff for token selection
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* System Prompt Configuration */}
+                          <div>
+                            <h4 className="text-sm font-medium mb-4">System Behavior</h4>
+                            <div className="space-y-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="system-prompt">Default System Prompt</Label>
+                                <Textarea
+                                  id="system-prompt"
+                                  placeholder="You are a helpful AI assistant for note-taking and document generation..."
+                                  rows={4}
+                                  defaultValue="You are a helpful AI assistant specialized in note-taking, document generation, and knowledge management. You provide clear, well-structured responses and help users organize their thoughts effectively."
+                                />
+                              </div>
+                              
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="flex items-center space-x-2">
+                                  <input type="checkbox" id="stream-response" defaultChecked />
+                                  <Label htmlFor="stream-response">Stream responses</Label>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <input type="checkbox" id="auto-title" defaultChecked />
+                                  <Label htmlFor="auto-title">Auto-generate titles</Label>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <input type="checkbox" id="save-context" defaultChecked />
+                                  <Label htmlFor="save-context">Save conversation context</Label>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <input type="checkbox" id="enable-tools" />
+                                  <Label htmlFor="enable-tools">Enable function calling</Label>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </TabsContent>
+
                   {/* Templates Tab */}
                   <TabsContent value="templates" className="mt-0">
                     <div className="space-y-6">
@@ -541,15 +834,23 @@ export function AISettings({ onClose }: AISettingsProps) {
                         </CardHeader>
                         <CardContent className="space-y-4">
                           <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
-                            {isConnected ? (
+                            {connectionStatus.connected ? (
                               <>
                                 <Check className="h-4 w-4 text-green-500" />
-                                <span className="text-sm text-green-500">Connected to {currentProvider?.name}</span>
+                                <span className="text-sm text-green-500">
+                                  Connected to {currentProvider?.name}
+                                  {connectionStatus.version && ` (v${connectionStatus.version})`}
+                                </span>
+                              </>
+                            ) : connectionStatus.error ? (
+                              <>
+                                <AlertCircle className="h-4 w-4 text-red-500" />
+                                <span className="text-sm text-red-500">{connectionStatus.error}</span>
                               </>
                             ) : (
                               <>
                                 <AlertCircle className="h-4 w-4 text-yellow-500" />
-                                <span className="text-sm text-muted-foreground">Not connected</span>
+                                <span className="text-sm text-muted-foreground">Not tested</span>
                               </>
                             )}
                           </div>

@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
+import { useTheme } from "../lib/theme-provider"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -28,7 +29,7 @@ import {
   Save,
   RotateCcw,
   Database,
-  Send as Sync,
+  RefreshCw as Sync,
 } from "lucide-react"
 
 interface GeneralSettingsProps {
@@ -36,7 +37,7 @@ interface GeneralSettingsProps {
 }
 
 export function GeneralSettings({ onClose }: GeneralSettingsProps) {
-  const [theme, setTheme] = useState("dark")
+  const { theme, setTheme } = useTheme()
   const [fontSize, setFontSize] = useState("14")
   const [fontFamily, setFontFamily] = useState("inter")
   const [lineHeight, setLineHeight] = useState("1.6")
@@ -54,7 +55,7 @@ export function GeneralSettings({ onClose }: GeneralSettingsProps) {
   const [enableCrashReports, setEnableCrashReports] = useState(true)
 
   const handleReset = () => {
-    setTheme("dark")
+    setTheme("system")
     setFontSize("14")
     setFontFamily("inter")
     setLineHeight("1.6")
@@ -133,7 +134,7 @@ export function GeneralSettings({ onClose }: GeneralSettingsProps) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
       <div className="bg-background border border-border rounded-lg w-full max-w-4xl h-[80vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-border">

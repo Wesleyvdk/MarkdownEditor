@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { createPortal } from "react-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -333,10 +334,23 @@ export function Sidebar({ onNoteSelect, selectedNote }: SidebarProps) {
         </Button>
       </div>
 
-      {showTagManager && <TagManager tags={mockTags} notes={mockNotes} onClose={() => setShowTagManager(false)} />}
-      {showAISettings && <AISettings onClose={() => setShowAISettings(false)} />}
-      {showAdminDashboard && <AdminDashboard onClose={() => setShowAdminDashboard(false)} />}
-      {showGeneralSettings && <GeneralSettings onClose={() => setShowGeneralSettings(false)} />}
+      {/* Render modals using portal to appear on top of everything */}
+      {showTagManager && typeof window !== "undefined" && createPortal(
+        <TagManager tags={mockTags} notes={mockNotes} onClose={() => setShowTagManager(false)} />,
+        document.body
+      )}
+      {showAISettings && typeof window !== "undefined" && createPortal(
+        <AISettings onClose={() => setShowAISettings(false)} />,
+        document.body
+      )}
+      {showAdminDashboard && typeof window !== "undefined" && createPortal(
+        <AdminDashboard onClose={() => setShowAdminDashboard(false)} />,
+        document.body
+      )}
+      {showGeneralSettings && typeof window !== "undefined" && createPortal(
+        <GeneralSettings onClose={() => setShowGeneralSettings(false)} />,
+        document.body
+      )}
     </div>
   )
 }

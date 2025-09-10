@@ -55,7 +55,7 @@ export function LinkAutocomplete({ position, query, notes, onSelect, onClose }: 
 
   return (
     <Card
-      className="absolute z-50 w-64 max-h-48 overflow-auto shadow-lg border-accent/20"
+      className="absolute z-[9999] w-64 max-h-48 overflow-auto shadow-lg border-accent/20"
       style={{
         left: position.x,
         top: position.y + 20,

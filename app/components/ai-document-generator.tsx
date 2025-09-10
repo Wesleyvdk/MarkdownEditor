@@ -262,7 +262,7 @@ ${ragContext ? `\n## Context Integration\nThis document incorporates relevant in
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
       <div className="bg-background border border-border rounded-lg w-full max-w-6xl h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-border">
