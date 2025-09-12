@@ -10,6 +10,7 @@ import { Plus, FileText, Filter, SortAsc, SortDesc, Calendar, Hash, X } from "lu
 
 interface NotesListProps {
   onNoteSelect: (noteId: string) => void
+  onCreateNote?: () => void
 }
 
 // Mock data - will be replaced with real data later
@@ -70,7 +71,7 @@ const allTags = [
   "academic",
 ]
 
-export function NotesList({ onNoteSelect }: NotesListProps) {
+export function NotesList({ onNoteSelect, onCreateNote }: NotesListProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [sortBy, setSortBy] = useState<"title" | "date" | "wordCount">("date")
@@ -129,7 +130,10 @@ export function NotesList({ onNoteSelect }: NotesListProps) {
                 ` • Filtered by ${selectedTags.length} tag${selectedTags.length > 1 ? "s" : ""}`}
             </p>
           </div>
-          <Button className="bg-primary hover:bg-primary/90">
+          <Button 
+            className="bg-primary hover:bg-primary/90"
+            onClick={onCreateNote}
+          >
             <Plus className="h-4 w-4 mr-2" />
             New Note
           </Button>
@@ -277,7 +281,10 @@ export function NotesList({ onNoteSelect }: NotesListProps) {
                 : "Try adjusting your search or tag filters"}
             </p>
             {mockNotes.length === 0 ? (
-              <Button className="bg-primary hover:bg-primary/90">
+              <Button 
+                className="bg-primary hover:bg-primary/90"
+                onClick={onCreateNote}
+              >
                 <Plus className="h-4 w-4 mr-2" />
                 Create Note
               </Button>

@@ -33,6 +33,8 @@ export interface SearchOptions {
 }
 
 export class NotesService {
+  // Keep track of active auto-save operations to prevent conflicts
+  private activeAutoSaves = new Set<string>()
   async createNote(userId: string, data: CreateNoteRequest): Promise<Note> {
     const noteId = crypto.randomUUID()
     
@@ -113,6 +115,42 @@ export class NotesService {
       .returning()
 
     return updatedNote
+  }
+
+  /**
+   * Auto-save optimized update - handles concurrent saves gracefully
+   */
+  async autoSaveNote(userId: string, noteId: string | null, data: UpdateNoteRequest): Promise<Note> {
+    const saveKey = `${userId}:${noteId || 'new'}`
+    
+    // Prevent concurrent auto-saves for the same note
+    if (this.activeAutoSaves.has(saveKey)) {
+      throw new Error('Auto-save already in progress for this note')
+    }
+
+    this.activeAutoSaves.add(saveKey)
+    
+    try {
+      if (noteId) {
+        return await this.updateNote(userId, noteId, data)
+      } else {
+        return await this.createNote(userId, {
+          title: data.title || 'Untitled Note',
+          content: data.content || '',
+          tags: data.tags || [],
+        })
+      }
+    } finally {
+      this.activeAutoSaves.delete(saveKey)
+    }
+  }
+
+  /**
+   * Check if an auto-save is currently in progress
+   */
+  isAutoSaveInProgress(userId: string, noteId: string | null): boolean {
+    const saveKey = `${userId}:${noteId || 'new'}`
+    return this.activeAutoSaves.has(saveKey)
   }
 
   async getNoteById(userId: string, noteId: string): Promise<Note | null> {
@@ -352,6 +390,79 @@ export class NotesService {
       .set({ lastAccessedAt: new Date() })
       .where(and(eq(notes.id, noteId), eq(notes.userId, userId)))
   }
+
+  /**
+   * Batch operations for handling multiple notes efficiently
+   */
+  async batchUpdateLastAccessed(userId: string, noteIds: string[]): Promise<void> {
+    if (noteIds.length === 0) return
+    
+    await db
+      .update(notes)
+      .set({ lastAccessedAt: new Date() })
+      .where(
+        and(
+          eq(notes.userId, userId),
+          inArray(notes.id, noteIds)
+        )
+      )
+  }
+
+  /**
+   * Get notes that need cleanup (haven't been accessed in X days)
+   */
+  async getStaleNotes(userId: string, daysStale = 30): Promise<Note[]> {
+    const staleDate = new Date()
+    staleDate.setDate(staleDate.getDate() - daysStale)
+    
+    return await db
+      .select()
+      .from(notes)
+      .where(
+        and(
+          eq(notes.userId, userId),
+          eq(notes.isDeleted, false),
+          sql`${notes.lastAccessedAt} < ${staleDate}`
+        )
+      )
+      .limit(100) // Limit for performance
+  }
+
+  /**
+   * Optimized search for auto-complete (note titles only)
+   */
+  async searchNoteTitles(userId: string, query: string, limit = 10): Promise<Pick<Note, 'id' | 'title'>[]> {
+    return await db
+      .select({
+        id: notes.id,
+        title: notes.title,
+      })
+      .from(notes)
+      .where(
+        and(
+          eq(notes.userId, userId),
+          eq(notes.isDeleted, false),
+          ilike(notes.title, `%${query}%`)
+        )
+      )
+      .orderBy(desc(notes.lastAccessedAt))
+      .limit(limit)
+  }
 }
 
 export const notesService = new NotesService()
+
+// Helper function for generating session IDs
+export function generateSessionId(): string {
+  return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+}
+
+// Helper function for sanitizing note titles for file systems
+export function sanitizeNoteTitle(title: string): string {
+  return title
+    .replace(/[<>:"/\\|?*]/g, '') // Remove invalid file system characters
+    .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+    .trim()
+    .slice(0, 200) // Limit length
+    || 'Untitled Note' // Fallback
+}

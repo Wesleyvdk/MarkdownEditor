@@ -3,7 +3,9 @@ interface AIProvider {
   type: "local" | "cloud"
   models: string[]
   requiresApiKey: boolean
-  baseUrl?: string
+  defaultBaseUrl?: string
+  modelsFetched?: boolean
+  lastModelsFetch?: number
 }
 
 interface OllamaModel {
@@ -52,33 +54,37 @@ export const AI_PROVIDERS: Record<string, AIProvider> = {
   ollama: {
     name: "Ollama",
     type: "local",
-    models: [], // Will be populated dynamically
+    models: [],
     requiresApiKey: false,
-    baseUrl: "http://localhost:11434",
+    defaultBaseUrl: "http://localhost:11434",
   },
   openai: {
     name: "OpenAI",
     type: "cloud",
     models: ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"],
     requiresApiKey: true,
+    defaultBaseUrl: "https://api.openai.com",
   },
   anthropic: {
     name: "Anthropic",
     type: "cloud",
     models: ["claude-3-5-sonnet-20241022", "claude-3-haiku-20240307", "claude-3-opus-20240229"],
     requiresApiKey: true,
+    defaultBaseUrl: "https://api.anthropic.com",
   },
   groq: {
     name: "Groq",
     type: "cloud",
     models: ["llama-3.1-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
     requiresApiKey: true,
+    defaultBaseUrl: "https://api.groq.com",
   },
   gemini: {
     name: "Google Gemini",
     type: "cloud",
     models: ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro"],
     requiresApiKey: true,
+    defaultBaseUrl: "https://generativelanguage.googleapis.com",
   },
 }
 
@@ -91,8 +97,128 @@ class AIService {
     maxTokens: 2048,
   }
 
+  private customBaseUrls: Record<string, string> = {}
+  private cachedModels: Record<string, { models: string[]; timestamp: number }> = {}
+  private readonly MODEL_CACHE_DURATION = 1000 * 60 * 60 // 1 hour
+  private readonly SETTINGS_KEY = 'ai-service-settings'
+
+  constructor() {
+    this.loadSettings()
+  }
+
   setConfig(config: Partial<AIConfig>) {
     this.config = { ...this.config, ...config }
+    
+    // If baseUrl is being set, also store it as custom baseUrl for this provider
+    if (config.baseUrl && config.provider) {
+      this.customBaseUrls[config.provider] = config.baseUrl
+    }
+  }
+
+  setCustomBaseUrl(provider: string, baseUrl: string) {
+    this.customBaseUrls[provider] = baseUrl
+    if (this.config.provider === provider) {
+      this.config.baseUrl = baseUrl
+    }
+    this.saveSettings()
+  }
+
+  getCustomBaseUrl(provider: string): string | undefined {
+    return this.customBaseUrls[provider]
+  }
+
+  getEffectiveBaseUrl(provider?: string): string {
+    const targetProvider = provider || this.config.provider
+    return this.customBaseUrls[targetProvider] || 
+           AI_PROVIDERS[targetProvider]?.defaultBaseUrl || 
+           this.config.baseUrl ||
+           "http://localhost:11434"
+  }
+
+  private loadSettings() {
+    try {
+      const saved = localStorage.getItem(this.SETTINGS_KEY)
+      if (saved) {
+        const settings = JSON.parse(saved)
+        this.customBaseUrls = settings.customBaseUrls || {}
+        this.cachedModels = settings.cachedModels || {}
+        
+        // Clean up old cache entries
+        const now = Date.now()
+        Object.keys(this.cachedModels).forEach(key => {
+          if (now - this.cachedModels[key].timestamp > this.MODEL_CACHE_DURATION) {
+            delete this.cachedModels[key]
+          }
+        })
+      }
+    } catch (error) {
+      console.error('Failed to load AI service settings:', error)
+      this.customBaseUrls = {}
+      this.cachedModels = {}
+    }
+  }
+
+  private saveSettings() {
+    try {
+      const settings = {
+        customBaseUrls: this.customBaseUrls,
+        cachedModels: this.cachedModels
+      }
+      localStorage.setItem(this.SETTINGS_KEY, JSON.stringify(settings))
+    } catch (error) {
+      console.error('Failed to save AI service settings:', error)
+    }
+  }
+
+  clearCache() {
+    this.cachedModels = {}
+    this.saveSettings()
+  }
+
+  resetCustomUrls() {
+    this.customBaseUrls = {}
+    this.saveSettings()
+  }
+
+  getAllProviders(): Record<string, AIProvider> {
+    return AI_PROVIDERS
+  }
+
+  getProviderInfo(provider: string): AIProvider | undefined {
+    return AI_PROVIDERS[provider]
+  }
+
+  isModelCacheValid(provider: string): boolean {
+    const cache = this.cachedModels[provider]
+    if (!cache) return false
+    
+    const now = Date.now()
+    return (now - cache.timestamp) < this.MODEL_CACHE_DURATION
+  }
+
+  getCachedModels(provider: string): string[] | undefined {
+    const cache = this.cachedModels[provider]
+    if (!cache || !this.isModelCacheValid(provider)) return undefined
+    return cache.models
+  }
+
+  async refreshModels(provider?: string): Promise<string[]> {
+    const targetProvider = provider || this.config.provider
+    const originalProvider = this.config.provider
+    
+    if (targetProvider !== originalProvider) {
+      // Temporarily switch provider to fetch models
+      this.config.provider = targetProvider
+    }
+    
+    try {
+      const models = await this.getAvailableModels(true)
+      return models
+    } finally {
+      if (targetProvider !== originalProvider) {
+        this.config.provider = originalProvider
+      }
+    }
   }
 
   getConfig(): AIConfig {
@@ -126,7 +252,7 @@ class AIService {
   private async generateWithOllama(prompt: string, systemPrompt?: string, context?: string[]): Promise<string> {
     const fullPrompt = this.buildPrompt(prompt, systemPrompt, context)
 
-    const response = await fetch(`${this.config.baseUrl}/api/generate`, {
+    const response = await fetch(`${this.getEffectiveBaseUrl()}/api/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -162,7 +288,7 @@ class AIService {
     }
     messages.push({ role: "user", content: prompt })
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch(`${this.getEffectiveBaseUrl("openai")}/v1/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -189,7 +315,7 @@ class AIService {
       throw new Error("Anthropic API key is required")
     }
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch(`${this.getEffectiveBaseUrl("anthropic")}/v1/messages`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -227,7 +353,7 @@ class AIService {
     }
     messages.push({ role: "user", content: prompt })
 
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    const response = await fetch(`${this.getEffectiveBaseUrl("groq")}/openai/v1/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -257,7 +383,7 @@ class AIService {
     const fullPrompt = this.buildPrompt(prompt, systemPrompt, context)
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${this.config.model}:generateContent?key=${this.config.apiKey}`,
+      `${this.getEffectiveBaseUrl("gemini")}/v1beta/models/${this.config.model}:generateContent?key=${this.config.apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -313,7 +439,7 @@ class AIService {
           if (!this.config.apiKey) {
             return { connected: false, error: "API key required" }
           }
-          const openaiResponse = await fetch("https://api.openai.com/v1/models", {
+          const openaiResponse = await fetch(`${this.getEffectiveBaseUrl("openai")}/v1/models`, {
             headers: { Authorization: `Bearer ${this.config.apiKey}` },
           })
           if (openaiResponse.ok) {
@@ -331,7 +457,7 @@ class AIService {
           if (!this.config.apiKey) {
             return { connected: false, error: "API key required" }
           }
-          const groqResponse = await fetch("https://api.groq.com/openai/v1/models", {
+          const groqResponse = await fetch(`${this.getEffectiveBaseUrl("groq")}/openai/v1/models`, {
             headers: { Authorization: `Bearer ${this.config.apiKey}` },
           })
           if (groqResponse.ok) {
@@ -355,31 +481,138 @@ class AIService {
     }
   }
 
-  async getAvailableModels(): Promise<string[]> {
+  async getAvailableModels(forceRefresh = false): Promise<string[]> {
     const provider = AI_PROVIDERS[this.config.provider]
     if (!provider) return []
 
-    if (provider.type === "local" && this.config.provider === "ollama") {
-      try {
-        const response = await fetch(`${this.config.baseUrl}/api/tags`)
-        if (response.ok) {
-          const data = await response.json()
-          const models = data.models?.map((model: OllamaModel) => model.name) || []
-          // Update the provider's models cache
-          AI_PROVIDERS[this.config.provider].models = models
-          return models
-        }
-      } catch (error) {
-        console.error("Failed to fetch Ollama models:", error)
-      }
+    const cacheKey = this.config.provider
+    const now = Date.now()
+    
+    // Check cache first (unless force refresh)
+    if (!forceRefresh && this.cachedModels[cacheKey] && 
+        (now - this.cachedModels[cacheKey].timestamp) < this.MODEL_CACHE_DURATION) {
+      return this.cachedModels[cacheKey].models
     }
 
-    return provider.models
+    let models: string[] = []
+
+    try {
+      if (provider.type === "local" && this.config.provider === "ollama") {
+        const response = await fetch(`${this.getEffectiveBaseUrl()}/api/tags`)
+        if (response.ok) {
+          const data = await response.json()
+          models = data.models?.map((model: OllamaModel) => model.name) || []
+        }
+      } else if (provider.type === "cloud") {
+        models = await this.fetchCloudProviderModels(this.config.provider)
+      }
+    } catch (error) {
+      console.error(`Failed to fetch ${this.config.provider} models:`, error)
+      // Fall back to cached models or static list
+      if (this.cachedModels[cacheKey]) {
+        return this.cachedModels[cacheKey].models
+      }
+      return provider.models
+    }
+
+    // Update cache and provider
+    if (models.length > 0) {
+      this.cachedModels[cacheKey] = { models, timestamp: now }
+      AI_PROVIDERS[this.config.provider].models = models
+      AI_PROVIDERS[this.config.provider].modelsFetched = true
+      AI_PROVIDERS[this.config.provider].lastModelsFetch = now
+      this.saveSettings()
+    }
+
+    return models.length > 0 ? models : provider.models
+  }
+
+  private async fetchCloudProviderModels(provider: string): Promise<string[]> {
+    if (!this.config.apiKey && provider !== "ollama") {
+      throw new Error(`API key required for ${provider}`)
+    }
+
+    switch (provider) {
+      case "openai":
+        return await this.fetchOpenAIModels()
+      case "anthropic":
+        return await this.fetchAnthropicModels()
+      case "groq":
+        return await this.fetchGroqModels()
+      case "gemini":
+        return await this.fetchGeminiModels()
+      default:
+        throw new Error(`Unsupported provider: ${provider}`)
+    }
+  }
+
+  private async fetchOpenAIModels(): Promise<string[]> {
+    const response = await fetch(`${this.getEffectiveBaseUrl("openai")}/v1/models`, {
+      headers: {
+        Authorization: `Bearer ${this.config.apiKey}`,
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`OpenAI models API error: ${response.statusText}`)
+    }
+
+    const data = await response.json()
+    return data.data
+      ?.filter((model: any) => model.id.startsWith("gpt-"))
+      ?.map((model: any) => model.id)
+      ?.sort() || []
+  }
+
+  private async fetchAnthropicModels(): Promise<string[]> {
+    // Anthropic doesn't have a public models endpoint
+    // Return known models with potential new ones
+    return [
+      "claude-3-5-sonnet-20241022",
+      "claude-3-5-sonnet-20240620", 
+      "claude-3-5-haiku-20241022",
+      "claude-3-haiku-20240307",
+      "claude-3-opus-20240229",
+      "claude-3-sonnet-20240229"
+    ]
+  }
+
+  private async fetchGroqModels(): Promise<string[]> {
+    const response = await fetch(`${this.getEffectiveBaseUrl("groq")}/openai/v1/models`, {
+      headers: {
+        Authorization: `Bearer ${this.config.apiKey}`,
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`Groq models API error: ${response.statusText}`)
+    }
+
+    const data = await response.json()
+    return data.data
+      ?.map((model: any) => model.id)
+      ?.sort() || []
+  }
+
+  private async fetchGeminiModels(): Promise<string[]> {
+    const response = await fetch(
+      `${this.getEffectiveBaseUrl("gemini")}/v1beta/models?key=${this.config.apiKey}`
+    )
+
+    if (!response.ok) {
+      throw new Error(`Gemini models API error: ${response.statusText}`)
+    }
+
+    const data = await response.json()
+    return data.models
+      ?.filter((model: any) => model.supportedGenerationMethods?.includes("generateContent"))
+      ?.map((model: any) => model.name.replace("models/", ""))
+      ?.sort() || []
   }
 
   async getOllamaModels(): Promise<OllamaModelInfo[]> {
     try {
-      const response = await fetch(`${this.config.baseUrl}/api/tags`)
+      const response = await fetch(`${this.getEffectiveBaseUrl()}/api/tags`)
       if (!response.ok) {
         throw new Error(`Failed to fetch models: ${response.statusText}`)
       }
@@ -432,7 +665,7 @@ class AIService {
 
   async downloadOllamaModel(modelName: string): Promise<ReadableStream<Uint8Array> | null> {
     try {
-      const response = await fetch(`${this.config.baseUrl}/api/pull`, {
+      const response = await fetch(`${this.getEffectiveBaseUrl()}/api/pull`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: modelName, stream: true })
@@ -451,7 +684,7 @@ class AIService {
 
   async deleteOllamaModel(modelName: string): Promise<boolean> {
     try {
-      const response = await fetch(`${this.config.baseUrl}/api/delete`, {
+      const response = await fetch(`${this.getEffectiveBaseUrl()}/api/delete`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: modelName })
@@ -466,7 +699,7 @@ class AIService {
 
   async checkOllamaConnection(): Promise<{ connected: boolean; version?: string; error?: string }> {
     try {
-      const response = await fetch(`${this.config.baseUrl}/api/version`)
+      const response = await fetch(`${this.getEffectiveBaseUrl()}/api/version`)
       if (response.ok) {
         const data = await response.json()
         return { connected: true, version: data.version }
@@ -490,5 +723,15 @@ class AIService {
   }
 }
 
-export const aiService = new AIService()
-export type { AIConfig, GenerateOptions, OllamaModelInfo }
+// Initialize the service
+let aiServiceInstance: AIService | null = null
+
+export function getAIService(): AIService {
+  if (!aiServiceInstance) {
+    aiServiceInstance = new AIService()
+  }
+  return aiServiceInstance
+}
+
+export const aiService = getAIService()
+export type { AIConfig, GenerateOptions, OllamaModelInfo, AIProvider }

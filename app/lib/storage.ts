@@ -3,6 +3,8 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import crypto from 'crypto'
 
 export class R2StorageService {
+  // Keep track of upload operations to prevent conflicts
+  private activeUploads = new Map<string, Promise<any>>()
   private client: S3Client
   private bucketName: string
 
@@ -29,29 +31,51 @@ export class R2StorageService {
 
   async uploadNote(userId: string, noteId: string, content: string): Promise<{ objectKey: string; contentHash: string; size: number }> {
     const objectKey = this.generateObjectKey(userId, noteId)
+    const uploadKey = `${userId}:${noteId}`
+    
+    // Check if there's already an upload in progress for this note
+    const existingUpload = this.activeUploads.get(uploadKey)
+    if (existingUpload) {
+      // Wait for the existing upload to complete and return its result
+      return await existingUpload
+    }
+
     const contentHash = this.generateContentHash(content)
     const buffer = Buffer.from(content, 'utf8')
 
+    const uploadPromise = this.performUpload(objectKey, buffer, {
+      userId,
+      noteId,
+      contentHash,
+      uploadedAt: new Date().toISOString(),
+    })
+
+    // Track the upload
+    this.activeUploads.set(uploadKey, uploadPromise)
+
+    try {
+      const result = await uploadPromise
+      return {
+        objectKey,
+        contentHash,
+        size: buffer.length,
+      }
+    } finally {
+      // Clean up tracking
+      this.activeUploads.delete(uploadKey)
+    }
+  }
+
+  private async performUpload(objectKey: string, buffer: Buffer, metadata: Record<string, string>): Promise<void> {
     const command = new PutObjectCommand({
       Bucket: this.bucketName,
       Key: objectKey,
       Body: buffer,
       ContentType: 'text/markdown',
-      Metadata: {
-        userId,
-        noteId,
-        contentHash,
-        uploadedAt: new Date().toISOString(),
-      },
+      Metadata: metadata,
     })
 
     await this.client.send(command)
-
-    return {
-      objectKey,
-      contentHash,
-      size: buffer.length,
-    }
   }
 
   async downloadNote(objectKey: string): Promise<string> {
@@ -123,6 +147,123 @@ export class R2StorageService {
     // For now, this is a placeholder that would require additional implementation
     throw new Error('listUserNotes not implemented - use database queries instead')
   }
+
+  /**
+   * Upload with retry logic for better reliability
+   */
+  async uploadNoteWithRetry(
+    userId: string,
+    noteId: string,
+    content: string,
+    maxRetries = 3
+  ): Promise<{ objectKey: string; contentHash: string; size: number }> {
+    let lastError: Error
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await this.uploadNote(userId, noteId, content)
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error('Upload failed')
+        
+        if (attempt === maxRetries) {
+          break
+        }
+
+        // Exponential backoff
+        const delay = Math.pow(2, attempt) * 1000
+        await new Promise(resolve => setTimeout(resolve, delay))
+      }
+    }
+
+    throw lastError!
+  }
+
+  /**
+   * Check if upload is currently in progress
+   */
+  isUploadInProgress(userId: string, noteId: string): boolean {
+    const uploadKey = `${userId}:${noteId}`
+    return this.activeUploads.has(uploadKey)
+  }
+
+  /**
+   * Create backup copy before overwriting
+   */
+  async createBackupBeforeUpload(userId: string, noteId: string): Promise<string | null> {
+    const objectKey = this.generateObjectKey(userId, noteId)
+    
+    try {
+      // Check if current version exists
+      const exists = await this.noteExists(objectKey)
+      if (!exists) {
+        return null
+      }
+
+      // Create backup key with timestamp
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+      const backupKey = `users/${userId}/backups/${noteId}_${timestamp}.md`
+
+      // Download current content
+      const currentContent = await this.downloadNote(objectKey)
+      
+      // Upload as backup
+      const backupCommand = new PutObjectCommand({
+        Bucket: this.bucketName,
+        Key: backupKey,
+        Body: Buffer.from(currentContent, 'utf8'),
+        ContentType: 'text/markdown',
+        Metadata: {
+          userId,
+          noteId,
+          originalKey: objectKey,
+          backupCreated: timestamp,
+        },
+      })
+
+      await this.client.send(backupCommand)
+      return backupKey
+
+    } catch (error) {
+      console.error('Failed to create backup:', error)
+      return null
+    }
+  }
+
+  /**
+   * Batch upload for multiple notes (useful for bulk operations)
+   */
+  async batchUploadNotes(
+    uploads: Array<{ userId: string; noteId: string; content: string }>
+  ): Promise<Array<{ success: boolean; objectKey?: string; contentHash?: string; size?: number; error?: string }>> {
+    const results = await Promise.allSettled(
+      uploads.map(({ userId, noteId, content }) => 
+        this.uploadNote(userId, noteId, content)
+      )
+    )
+
+    return results.map((result, index) => {
+      if (result.status === 'fulfilled') {
+        return { success: true, ...result.value }
+      } else {
+        return {
+          success: false,
+          error: result.reason?.message || 'Unknown error'
+        }
+      }
+    })
+  }
 }
 
 export const r2Storage = new R2StorageService()
+
+// Helper function to handle storage errors gracefully
+export function handleStorageError(error: unknown, operation: string): Error {
+  console.error(`Storage error during ${operation}:`, error)
+  
+  if (error instanceof Error) {
+    // Add more context to the error
+    return new Error(`${operation} failed: ${error.message}`)
+  }
+  
+  return new Error(`${operation} failed: Unknown error`)
+}

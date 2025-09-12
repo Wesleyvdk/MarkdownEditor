@@ -142,9 +142,8 @@ export function RAGPanel({ currentNoteId, onContextSelect }: RAGPanelProps) {
               {searchResults.map((result, index) => (
                 <Card
                   key={result.chunk.id}
-                  className={`cursor-pointer transition-colors ${
-                    selectedChunks.includes(result.chunk.id) ? "border-primary bg-primary/5" : "hover:bg-muted/50"
-                  }`}
+                  className={`cursor-pointer transition-colors ${selectedChunks.includes(result.chunk.id) ? "border-primary bg-primary/5" : "hover:bg-muted/50"
+                    }`}
                   onClick={() => toggleChunkSelection(result.chunk.id)}
                 >
                   <CardHeader className="pb-2">

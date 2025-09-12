@@ -36,7 +36,7 @@ export class AuthService {
       .select()
       .from(users)
       .where(eq(users.email, data.email))
-      .then(results => results[0])
+      .then((results: any[]) => results[0])
 
     if (existingUser) {
       throw new Error('User already exists with this email')
@@ -47,7 +47,7 @@ export class AuthService {
       .select()
       .from(users)
       .where(eq(users.username, data.username))
-      .then(results => results[0])
+      .then((results: any[]) => results[0])
 
     if (existingUsername) {
       throw new Error('Username is already taken')
@@ -85,7 +85,7 @@ export class AuthService {
       .select()
       .from(users)
       .where(eq(users.email, credentials.email))
-      .then(results => results[0])
+      .then((results: any[]) => results[0])
 
     if (!user) {
       throw new Error('Invalid email or password')
@@ -122,7 +122,7 @@ export class AuthService {
       .select()
       .from(users)
       .where(eq(users.id, userId))
-      .then(results => results[0])
+      .then((results: any[]) => results[0])
 
     if (!user) {
       return null
@@ -174,7 +174,7 @@ export class AuthService {
       .select()
       .from(users)
       .where(eq(users.id, userId))
-      .then(results => results[0])
+      .then((results: any[]) => results[0])
 
     if (!user) {
       throw new Error('User not found')
