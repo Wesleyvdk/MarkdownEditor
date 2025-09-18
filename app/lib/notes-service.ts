@@ -452,17 +452,4 @@ export class NotesService {
 
 export const notesService = new NotesService()
 
-// Helper function for generating session IDs
-export function generateSessionId(): string {
-  return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-}
-
-// Helper function for sanitizing note titles for file systems
-export function sanitizeNoteTitle(title: string): string {
-  return title
-    .replace(/[<>:"/\\|?*]/g, '') // Remove invalid file system characters
-    .replace(/\s+/g, ' ') // Replace multiple spaces with single space
-    .trim()
-    .slice(0, 200) // Limit length
-    || 'Untitled Note' // Fallback
-}
+export { generateSessionId, sanitizeNoteTitle } from './client-utils'

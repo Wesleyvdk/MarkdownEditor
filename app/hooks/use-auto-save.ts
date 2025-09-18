@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { autoSaveService, AutoSaveState } from '../lib/auto-save-service'
-import { Note } from '../database/schema'
+import { clientAutoSaveService, type AutoSaveState } from '../lib/client-auto-save-service'
+import type { Note } from '../database/schema'
 
 export interface UseAutoSaveOptions {
   userId: string
@@ -33,7 +33,7 @@ export function useAutoSave(options: UseAutoSaveOptions) {
 
   // Update status from auto-save state
   const updateStatus = useCallback(() => {
-    const state = autoSaveService.getSaveState(sessionId)
+    const state = clientAutoSaveService.getSaveState(sessionId)
     
     const newStatus: AutoSaveStatus = {
       isSaving: state?.saveInProgress ?? false,
@@ -51,7 +51,7 @@ export function useAutoSave(options: UseAutoSaveOptions) {
 
   // Schedule save function
   const scheduleSave = useCallback((title: string, content: string, tags: string[] = []) => {
-    autoSaveService.scheduleSave(sessionId, {
+    clientAutoSaveService.scheduleSave(sessionId, {
       userId,
       title,
       content,
@@ -67,7 +67,7 @@ export function useAutoSave(options: UseAutoSaveOptions) {
     try {
       setStatus(prev => ({ ...prev, isSaving: true, saveError: null }))
       
-      const note = await autoSaveService.forceSave(sessionId)
+      const note = await clientAutoSaveService.forceSave(sessionId)
       
       if (note && onSave) {
         onSave(note)
@@ -95,12 +95,12 @@ export function useAutoSave(options: UseAutoSaveOptions) {
 
   // Rename document
   const renameDocument = useCallback((newSessionId: string, newTitle: string) => {
-    autoSaveService.renameDocument(sessionId, newSessionId, newTitle)
+    clientAutoSaveService.renameDocument(sessionId, newSessionId, newTitle)
   }, [sessionId])
 
   // Get current note ID
   const getNoteId = useCallback(() => {
-    return autoSaveService.getNoteId(sessionId)
+    return clientAutoSaveService.getNoteId(sessionId)
   }, [sessionId])
 
   // Periodic status updates
@@ -112,20 +112,20 @@ export function useAutoSave(options: UseAutoSaveOptions) {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      autoSaveService.cleanup(sessionId)
+      clientAutoSaveService.cleanup(sessionId)
     }
   }, [sessionId])
 
   // Handle page unload
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      const hasUnsaved = autoSaveService.hasUnsavedChanges(sessionId)
+      const hasUnsaved = clientAutoSaveService.hasUnsavedChanges(sessionId)
       if (hasUnsaved) {
         e.preventDefault()
         e.returnValue = 'You have unsaved changes. Are you sure you want to leave?'
         
         // Attempt to save on page unload (though this may not complete)
-        autoSaveService.forceSave(sessionId).catch(console.error)
+        clientAutoSaveService.forceSave(sessionId).catch(console.error)
         
         return e.returnValue
       }
@@ -133,10 +133,10 @@ export function useAutoSave(options: UseAutoSaveOptions) {
 
     const handleUnload = () => {
       // Final attempt to save
-      const hasUnsaved = autoSaveService.hasUnsavedChanges(sessionId)
+      const hasUnsaved = clientAutoSaveService.hasUnsavedChanges(sessionId)
       if (hasUnsaved) {
         // Use navigator.sendBeacon for best chance of sending data on unload
-        const state = autoSaveService.getSaveState(sessionId)
+        const state = clientAutoSaveService.getSaveState(sessionId)
         if (state) {
           try {
             const data = JSON.stringify({
@@ -197,18 +197,18 @@ export function useMultiDocumentAutoSave(userId: string) {
   }, [userId])
 
   const removeSession = useCallback((sessionId: string) => {
-    autoSaveService.cleanup(sessionId)
+    clientAutoSaveService.cleanup(sessionId)
     sessions.delete(sessionId)
   }, [sessions])
 
   const saveAllSessions = useCallback(async () => {
-    await autoSaveService.saveAllPending()
+    await clientAutoSaveService.saveAllPending()
   }, [])
 
   return {
     createSession,
     removeSession,
     saveAllSessions,
-    getQueueSize: () => autoSaveService.getQueueSize(),
+    getQueueSize: () => clientAutoSaveService.getQueueSize(),
   }
 }

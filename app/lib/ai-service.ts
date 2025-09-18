@@ -136,6 +136,8 @@ class AIService {
   }
 
   private loadSettings() {
+    if (typeof window === 'undefined') return
+    
     try {
       const saved = localStorage.getItem(this.SETTINGS_KEY)
       if (saved) {
@@ -159,6 +161,8 @@ class AIService {
   }
 
   private saveSettings() {
+    if (typeof window === 'undefined') return
+    
     try {
       const settings = {
         customBaseUrls: this.customBaseUrls,

@@ -13,8 +13,17 @@ import { GeneralSettings } from "@/components/general-settings"
 import { Search, FileText, Tag, Plus, Hash, Link2, Settings, ArrowRight, Filter, X, Brain, Shield } from "lucide-react"
 
 interface SidebarProps {
-  onNoteSelect: (noteId: string) => void
-  selectedNote: string | null
+  onCreateNote: () => void
+  onViewNotes: () => void
+  onDashboard: () => void
+  onNoteSelect?: (noteId: string) => void
+  currentView: string
+  user?: {
+    userId: string
+    email: string
+    username: string
+    displayName?: string
+  }
 }
 
 // Mock data - will be replaced with real data later
@@ -46,7 +55,7 @@ const mockLinkedNotes = [
   { from: "Meeting Notes", to: "Getting Started", type: "incoming" },
 ]
 
-export function Sidebar({ onNoteSelect, selectedNote }: SidebarProps) {
+export function Sidebar({ onCreateNote, onViewNotes, onDashboard, onNoteSelect, currentView, user }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [activeTab, setActiveTab] = useState<"notes" | "tags" | "links">("notes")
   const [selectedTags, setSelectedTags] = useState<string[]>([])
@@ -159,25 +168,52 @@ export function Sidebar({ onNoteSelect, selectedNote }: SidebarProps) {
       {/* Content */}
       <ScrollArea className="flex-1">
         <div className="p-3 md:p-4">
+          {/* Navigation Options */}
+          <div className="space-y-2 mb-6">
+            <Button
+              variant={currentView === 'dashboard' ? 'default' : 'ghost'}
+              size="sm"
+              className="w-full justify-start"
+              onClick={onDashboard}
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              Dashboard
+            </Button>
+            <Button
+              variant={currentView === 'notes-list' ? 'default' : 'ghost'}
+              size="sm"
+              className="w-full justify-start"
+              onClick={onViewNotes}
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              All Notes
+            </Button>
+            <Button
+              variant={currentView === 'new-note' || currentView === 'editor' ? 'default' : 'ghost'}
+              size="sm"
+              className="w-full justify-start"
+              onClick={onCreateNote}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              New Note
+            </Button>
+          </div>
+          
           {activeTab === "notes" && (
             <div className="space-y-2">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-medium text-sidebar-foreground">
-                  Notes {selectedTags.length > 0 && `(${filteredNotes.length})`}
+                  Recent Notes {selectedTags.length > 0 && `(${filteredNotes.length})`}
                 </h3>
-                <Button size="sm" variant="ghost" className="h-6 w-6 p-0">
-                  <Plus className="h-4 w-4" />
-                </Button>
               </div>
               {filteredNotes.map((note) => (
                 <div
                   key={note.id}
-                  onClick={() => onNoteSelect(note.id)}
-                  className={`p-2 md:p-3 rounded-lg cursor-pointer transition-colors ${
-                    selectedNote === note.id
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                      : "hover:bg-sidebar-primary"
-                  }`}
+                  onClick={() => {
+                    console.log('Note clicked:', note.id, note.title)
+                    onNoteSelect?.(note.id)
+                  }}
+                  className={`p-2 md:p-3 rounded-lg cursor-pointer transition-colors hover:bg-sidebar-primary`}
                 >
                   <div className="font-medium text-sm mb-1 truncate">{note.title}</div>
                   <div className="flex flex-wrap gap-1 mb-2">
@@ -280,7 +316,7 @@ export function Sidebar({ onNoteSelect, selectedNote }: SidebarProps) {
                     className="p-2 rounded-lg hover:bg-sidebar-primary cursor-pointer"
                     onClick={() => {
                       const targetNote = mockNotes.find((note) => note.title === link.to)
-                      if (targetNote) onNoteSelect(targetNote.id)
+                      if (targetNote && onNoteSelect) onNoteSelect(targetNote.id)
                     }}
                   >
                     <div className="flex items-center gap-2 text-sm">
@@ -300,13 +336,22 @@ export function Sidebar({ onNoteSelect, selectedNote }: SidebarProps) {
         </div>
       </ScrollArea>
 
-      {/* Settings */}
+      {/* User Info & Settings */}
       <div className="p-3 md:p-4 border-t border-sidebar-border space-y-2">
+        {user && (
+          <div className="mb-3 p-2 bg-muted/50 rounded-lg">
+            <div className="text-sm font-medium">{user.displayName || user.username}</div>
+            <div className="text-xs text-muted-foreground">{user.email}</div>
+          </div>
+        )}
         <Button
           variant="ghost"
           size="sm"
           className="w-full justify-start text-xs md:text-sm"
-          onClick={() => setShowAISettings(true)}
+          onClick={() => {
+            console.log('AI Settings clicked')
+            setShowAISettings(true)
+          }}
         >
           <Brain className="h-4 w-4 mr-2" />
           <span className="hidden sm:inline">AI Settings</span>
@@ -316,7 +361,10 @@ export function Sidebar({ onNoteSelect, selectedNote }: SidebarProps) {
           variant="ghost"
           size="sm"
           className="w-full justify-start text-xs md:text-sm"
-          onClick={() => setShowAdminDashboard(true)}
+          onClick={() => {
+            console.log('Admin Dashboard clicked')
+            setShowAdminDashboard(true)
+          }}
         >
           <Shield className="h-4 w-4 mr-2" />
           <span className="hidden sm:inline">Admin Dashboard</span>
@@ -326,7 +374,10 @@ export function Sidebar({ onNoteSelect, selectedNote }: SidebarProps) {
           variant="ghost"
           size="sm"
           className="w-full justify-start text-xs md:text-sm"
-          onClick={() => setShowGeneralSettings(true)}
+          onClick={() => {
+            console.log('General Settings clicked')
+            setShowGeneralSettings(true)
+          }}
         >
           <Settings className="h-4 w-4 mr-2" />
           <span className="hidden sm:inline">Settings</span>

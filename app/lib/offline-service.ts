@@ -22,8 +22,8 @@ export class OfflineService {
   private readonly SYNC_DELAY = 5000 // 5 seconds between sync attempts
   
   private connectionStatus: ConnectionStatus = {
-    isOnline: navigator.onLine,
-    lastOnlineTime: navigator.onLine ? new Date() : null,
+    isOnline: typeof window !== 'undefined' ? navigator.onLine : false,
+    lastOnlineTime: typeof window !== 'undefined' && navigator.onLine ? new Date() : null,
     hasOfflineChanges: false,
     syncInProgress: false,
   }
@@ -32,11 +32,15 @@ export class OfflineService {
   private statusListeners = new Set<(status: ConnectionStatus) => void>()
 
   constructor() {
-    this.initializeOfflineSupport()
-    this.loadOfflineChanges()
+    if (typeof window !== 'undefined') {
+      this.initializeOfflineSupport()
+      this.loadOfflineChanges()
+    }
   }
 
   private initializeOfflineSupport() {
+    if (typeof window === 'undefined') return
+    
     // Listen for online/offline events
     window.addEventListener('online', this.handleOnline.bind(this))
     window.addEventListener('offline', this.handleOffline.bind(this))
@@ -386,5 +390,15 @@ export class OfflineService {
   }
 }
 
-// Singleton instance
-export const offlineService = new OfflineService()
+// Create singleton instance only on client-side
+let offlineServiceInstance: OfflineService | null = null
+
+export function getOfflineService(): OfflineService {
+  if (!offlineServiceInstance) {
+    offlineServiceInstance = new OfflineService()
+  }
+  return offlineServiceInstance
+}
+
+// Export singleton for client-side use
+export const offlineService = typeof window !== 'undefined' ? getOfflineService() : null

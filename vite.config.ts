@@ -5,4 +5,13 @@ import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
   plugins: [tailwindcss(), reactRouter(), tsconfigPaths()],
+  optimizeDeps: {
+    exclude: ['pg', 'drizzle-orm/pg-core']
+  },
+  ssr: {
+    noExternal: []
+  },
+  define: {
+    global: 'globalThis',
+  }
 });

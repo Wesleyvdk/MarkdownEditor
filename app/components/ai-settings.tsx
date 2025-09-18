@@ -888,7 +888,7 @@ export function AISettings({ onClose }: AISettingsProps) {
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button>Save Settings</Button>
+          <Button onClick={onClose}>Save Settings</Button>
         </div>
       </div>
     </div>

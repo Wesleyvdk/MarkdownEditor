@@ -1,6 +1,6 @@
 import { notesService } from './notes-service'
-import { offlineService } from './offline-service'
-import { Note, NewNote } from '../database/schema'
+import { offlineService, getOfflineService } from './offline-service'
+import type { Note, NewNote } from '../database/schema'
 
 export interface AutoSaveState {
   noteId?: string
@@ -151,7 +151,7 @@ export class AutoSaveService {
       this.saveQueue.set(sessionId, state)
 
       // Check if this is a network error - if so, store for offline sync
-      if (this.isNetworkError(error)) {
+      if (this.isNetworkError(error) && typeof window !== 'undefined' && offlineService) {
         console.log('Network error detected, storing for offline sync')
         await offlineService.storeOfflineChange({
           sessionId,
@@ -182,18 +182,20 @@ export class AutoSaveService {
         
         // As last resort, try to store offline
         try {
-          await offlineService.storeOfflineChange({
-            sessionId,
-            noteId: state.noteId,
-            title: state.title,
-            content: state.content,
-            tags: state.tags,
-            userId: state.userId,
-          })
-          
-          state.isDirty = false
-          state.lastSaved = new Date()
-          this.saveQueue.set(sessionId, state)
+          if (typeof window !== 'undefined' && offlineService) {
+            await offlineService.storeOfflineChange({
+              sessionId,
+              noteId: state.noteId,
+              title: state.title,
+              content: state.content,
+              tags: state.tags,
+              userId: state.userId,
+            })
+            
+            state.isDirty = false
+            state.lastSaved = new Date()
+            this.saveQueue.set(sessionId, state)
+          }
         } catch (offlineError) {
           console.error('Failed to store offline as well:', offlineError)
         }
@@ -319,14 +321,24 @@ export class AutoSaveService {
    * Get offline status
    */
   getOfflineStatus() {
-    return offlineService.getStatus()
+    if (typeof window !== 'undefined' && offlineService) {
+      return offlineService.getStatus()
+    }
+    return {
+      isOnline: true,
+      lastOnlineTime: new Date(),
+      hasOfflineChanges: false,
+      syncInProgress: false,
+    }
   }
 
   /**
    * Force sync offline changes
    */
   async syncOfflineChanges(): Promise<void> {
-    await offlineService.forceSync()
+    if (typeof window !== 'undefined' && offlineService) {
+      await offlineService.forceSync()
+    }
   }
 
   /**

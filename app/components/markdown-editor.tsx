@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -9,6 +9,9 @@ import { Separator } from "@/components/ui/separator"
 import { LinkAutocomplete } from "@/components/link-autocomplete"
 import { LinkVisualization } from "@/components/link-visualization"
 import { AIDocumentGenerator } from "@/components/ai-document-generator"
+import { AIChatbox } from "@/components/ai-chatbox"
+import { useAutoSave } from "../hooks/use-auto-save"
+import { generateSessionId } from "../lib/client-utils"
 import {
   Save,
   Network,
@@ -24,10 +27,21 @@ import {
   Sparkles,
   ChevronDown,
   ChevronUp,
+  MessageSquare,
+  CheckCircle,
+  Clock,
+  AlertTriangle,
+  Wifi,
+  WifiOff,
 } from "lucide-react"
 
 interface MarkdownEditorProps {
-  noteId: string
+  noteId?: string
+  userId: string
+  initialTitle?: string
+  initialContent?: string
+  initialTags?: string[]
+  onSaved?: (noteId: string) => void
 }
 
 // Mock note data - will be replaced with real data later
@@ -83,12 +97,22 @@ const mockNotes = [
   { id: "5", title: "Research Notes", content: "# Research Notes\n\nResearch findings and references..." },
 ]
 
-export function MarkdownEditor({ noteId }: MarkdownEditorProps) {
-  const [title, setTitle] = useState(mockNote.title)
-  const [content, setContent] = useState(mockNote.content)
-  const [tags, setTags] = useState(mockNote.tags)
+export function MarkdownEditor({ 
+  noteId, 
+  userId, 
+  initialTitle = '',
+  initialContent = '',
+  initialTags = [],
+  onSaved
+}: MarkdownEditorProps) {
+  const sessionId = useRef(generateSessionId()).current
+  
+  const [title, setTitle] = useState(initialTitle || mockNote.title)
+  const [content, setContent] = useState(initialContent || mockNote.content)
+  const [tags, setTags] = useState(initialTags.length > 0 ? initialTags : mockNote.tags)
   const [showLinkViz, setShowLinkViz] = useState(false)
   const [showAIGenerator, setShowAIGenerator] = useState(false)
+  const [showAIChatbox, setShowAIChatbox] = useState(false)
   const [newTag, setNewTag] = useState("")
   const [autocompletePosition, setAutocompletePosition] = useState<{ x: number; y: number } | null>(null)
   const [autocompleteQuery, setAutocompleteQuery] = useState("")
@@ -99,10 +123,30 @@ export function MarkdownEditor({ noteId }: MarkdownEditorProps) {
   const [isMobile, setIsMobile] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const editorRef = useRef<HTMLDivElement>(null)
+  
+  // Auto-save integration
+  const { status, scheduleSave, forceSave, getNoteId } = useAutoSave({
+    userId,
+    sessionId: noteId || sessionId,
+    onSave: (note) => {
+      console.log('Note auto-saved:', note.id)
+      if (onSaved) {
+        onSaved(note.id)
+      }
+    },
+    onError: (error) => {
+      console.error('Auto-save error:', error)
+    },
+  })
 
   useEffect(() => {
     setLines(content.split("\n"))
-  }, [content])
+    
+    // Schedule auto-save when content changes
+    if (title.trim() || content.trim()) {
+      scheduleSave(title || 'Untitled Note', content, tags)
+    }
+  }, [content, title, tags, scheduleSave])
 
   useEffect(() => {
     const checkMobile = () => {
@@ -429,6 +473,73 @@ export function MarkdownEditor({ noteId }: MarkdownEditorProps) {
     setShowAIGenerator(false)
   }
 
+  const handleForceSave = useCallback(async () => {
+    try {
+      const note = await forceSave()
+      if (note && onSaved) {
+        onSaved(note.id)
+      }
+    } catch (error) {
+      console.error('Force save failed:', error)
+    }
+  }, [forceSave, onSaved])
+
+  const handleAIChatInsert = (aiContent: string) => {
+    if (editingLineIndex !== null) {
+      // Insert at current line
+      const newLines = [...lines]
+      newLines[editingLineIndex] = newLines[editingLineIndex] + aiContent
+      setLines(newLines)
+      setContent(newLines.join("\n"))
+    } else {
+      // Append to end of content
+      const newContent = content + (content.endsWith('\n') ? '' : '\n\n') + aiContent
+      setContent(newContent)
+      setLines(newContent.split("\n"))
+    }
+    setShowAIChatbox(false)
+  }
+
+  // Auto-save status indicator component
+  const SaveStatusIndicator = () => {
+    if (status.isSaving) {
+      return (
+        <div className="flex items-center gap-2 text-blue-600 text-sm">
+          <Clock className="h-4 w-4 animate-spin" />
+          <span>Saving...</span>
+        </div>
+      )
+    }
+
+    if (status.hasUnsavedChanges) {
+      return (
+        <div className="flex items-center gap-2 text-amber-600 text-sm">
+          <AlertTriangle className="h-4 w-4" />
+          <span>Unsaved</span>
+        </div>
+      )
+    }
+
+    if (status.lastSaved) {
+      const timeSinceLastSave = Date.now() - status.lastSaved.getTime()
+      const minutes = Math.floor(timeSinceLastSave / 60000)
+      const seconds = Math.floor((timeSinceLastSave % 60000) / 1000)
+      
+      return (
+        <div className="flex items-center gap-2 text-green-600 text-sm">
+          <CheckCircle className="h-4 w-4" />
+          <span>{minutes > 0 ? `${minutes}m ago` : `${seconds}s ago`}</span>
+        </div>
+      )
+    }
+
+    return (
+      <div className="flex items-center gap-2 text-gray-500 text-sm">
+        <span>Not saved</span>
+      </div>
+    )
+  }
+
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
@@ -449,8 +560,24 @@ export function MarkdownEditor({ noteId }: MarkdownEditorProps) {
             >
               <Brain className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="sm" className="h-8 w-8 md:h-9 md:w-9 p-0">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="h-8 w-8 md:h-9 md:w-9 p-0"
+              onClick={handleForceSave}
+              disabled={status.isSaving}
+              title="Save now"
+            >
               <Save className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowAIChatbox(true)}
+              className="h-8 w-8 md:h-9 md:w-9 p-0"
+              title="Open AI Chat"
+            >
+              <MessageSquare className="h-4 w-4" />
             </Button>
             {!isMobile && (
               <Button
@@ -463,6 +590,11 @@ export function MarkdownEditor({ noteId }: MarkdownEditorProps) {
               </Button>
             )}
           </div>
+        </div>
+
+        {/* Auto-save Status */}
+        <div className="mb-2">
+          <SaveStatusIndicator />
         </div>
 
         {/* Tags */}
@@ -518,7 +650,11 @@ export function MarkdownEditor({ noteId }: MarkdownEditorProps) {
           <div className="flex items-center gap-1 flex-wrap">
             <Button variant="ghost" size="sm" onClick={() => setShowAIGenerator(true)} className="h-8 px-2">
               <Sparkles className="h-3 w-3 md:h-4 md:w-4" />
-              {!isMobile && <span className="ml-1 text-xs">AI</span>}
+              {!isMobile && <span className="ml-1 text-xs">Generate</span>}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setShowAIChatbox(true)} className="h-8 px-2">
+              <MessageSquare className="h-3 w-3 md:h-4 md:w-4" />
+              {!isMobile && <span className="ml-1 text-xs">Chat</span>}
             </Button>
             <Separator orientation="vertical" className="h-6 mx-1" />
             <Button variant="ghost" size="sm" onClick={() => insertMarkdown("**bold**")} className="h-8 px-2">
@@ -632,6 +768,16 @@ export function MarkdownEditor({ noteId }: MarkdownEditorProps) {
           relatedNotes={mockNotes}
         />
       )}
+
+      {/* AI Chatbox modal */}
+      <AIChatbox
+        isOpen={showAIChatbox}
+        onClose={() => setShowAIChatbox(false)}
+        onInsertContent={handleAIChatInsert}
+        currentNoteTitle={title}
+        currentNoteContent={content}
+        relatedNotes={mockNotes}
+      />
     </div>
   )
 }

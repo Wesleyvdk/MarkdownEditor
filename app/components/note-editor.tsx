@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useAutoSave } from '../hooks/use-auto-save'
-import { generateSessionId } from '../lib/notes-service'
+import { generateSessionId } from '../lib/client-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
