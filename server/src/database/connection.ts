@@ -3,7 +3,7 @@ import { Pool } from 'pg'
 import * as schema from './schema'
 
 const pool = new Pool(
-  process.env.DATABASE_URL 
+  process.env.DATABASE_URL
     ? {
         connectionString: process.env.DATABASE_URL,
       }

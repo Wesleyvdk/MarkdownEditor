@@ -1,6 +1,6 @@
-import { notesService } from './notes-service'
+// Notes service is now handled by the Fastify backend via HTTP
 import { offlineService, getOfflineService } from './offline-service'
-import type { Note } from '../database/schema'
+import type { Note } from '../types/database'
 
 export interface AutoSaveState {
   noteId?: string

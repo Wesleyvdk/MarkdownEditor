@@ -1,4 +1,4 @@
-import type { Note, NewNote } from '../database/schema'
+import type { Note, NewNote } from '../types/database'
 
 export interface AutoSaveState {
   noteId?: string
@@ -105,7 +105,7 @@ export class ClientAutoSaveService {
       let response: Response
       if (state.noteId) {
         // Update existing note - include userId as query parameter
-        response = await fetch(`/api/notes/${state.noteId}?userId=${encodeURIComponent(state.userId)}`, {
+        response = await fetch(`http://localhost:3010/api/notes/${state.noteId}?userId=${encodeURIComponent(state.userId)}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -118,7 +118,7 @@ export class ClientAutoSaveService {
         })
       } else {
         // Create new note
-        response = await fetch('/api/notes', {
+        response = await fetch('http://localhost:3010/api/notes', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

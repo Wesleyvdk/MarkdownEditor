@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Sidebar } from "@/components/sidebar"
+import { Sidebar } from "@/components/app-sidebar"
 import { NotesList } from "@/components/notes-list"
 import { MarkdownEditor } from "@/components/markdown-editor"
 import { ThemeToggle } from "@/components/theme-toggle"

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { autoSaveService, type AutoSaveState } from '../lib/auto-save-service'
-import type { Note } from '../database/schema'
+import type { Note } from '../types/database'
 
 export interface UseAutoSaveOptions {
   userId: string
@@ -149,7 +149,7 @@ export function useAutoSave(options: UseAutoSaveOptions) {
             })
             
             // Send to a dedicated endpoint that handles emergency saves
-            navigator.sendBeacon('/api/emergency-save', data)
+            navigator.sendBeacon('http://localhost:3010/api/emergency-save', data)
           } catch (error) {
             console.error('Emergency save failed:', error)
           }

@@ -13,17 +13,17 @@ import { GeneralSettings } from "@/components/general-settings"
 import { Search, FileText, Tag, Plus, Hash, Link2, Settings, ArrowRight, Filter, X, Brain, Shield } from "lucide-react"
 
 interface SidebarProps {
-  onCreateNote: () => void
-  onViewNotes: () => void
-  onDashboard: () => void
-  onNoteSelect?: (noteId: string) => void
-  currentView: string
+  onCreateNote: () => void;
+  onViewNotes: () => void;
+  onDashboard: () => void;
+  onNoteSelect?: (noteId: string) => void;
+  currentView: string;
   user?: {
-    userId: string
-    email: string
-    username: string
-    displayName?: string
-  }
+    userId: string;
+    email: string;
+    username: string;
+    displayName?: string;
+  };
 }
 
 // Mock data - will be replaced with real data later
@@ -213,7 +213,7 @@ export function Sidebar({ onCreateNote, onViewNotes, onDashboard, onNoteSelect, 
               New Note
             </Button>
           </div>
-          
+
           {activeTab === "notes" && (
             <div className="space-y-2">
               <div className="flex items-center justify-between mb-4">
@@ -278,9 +278,8 @@ export function Sidebar({ onCreateNote, onViewNotes, onDashboard, onNoteSelect, 
                 return (
                   <div
                     key={tag}
-                    className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${
-                      isSelected ? "bg-accent text-accent-foreground" : "hover:bg-sidebar-primary"
-                    }`}
+                    className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${isSelected ? "bg-accent text-accent-foreground" : "hover:bg-sidebar-primary"
+                      }`}
                     onClick={() => toggleTagFilter(tag)}
                   >
                     <Hash className={`h-4 w-4 ${isSelected ? "text-accent-foreground" : "text-accent"}`} />

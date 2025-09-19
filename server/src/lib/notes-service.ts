@@ -35,15 +35,16 @@ export interface SearchOptions {
 export class NotesService {
   // Keep track of active auto-save operations to prevent conflicts
   private activeAutoSaves = new Set<string>()
+
   async createNote(userId: string, data: CreateNoteRequest): Promise<Note> {
     const noteId = crypto.randomUUID()
-    
+
     try {
       // Upload content to R2
       const { objectKey, contentHash, size } = await r2Storage.uploadNote(userId, noteId, data.content)
-      
+
       // Insert note record into database
-      const [newNote] = await db.insert(notes).values({
+      const result = await db.insert(notes).values({
         id: noteId,
         userId,
         title: data.title,
@@ -52,6 +53,11 @@ export class NotesService {
         fileSize: size,
         tags: data.tags || [],
       }).returning()
+
+      const newNote = result[0]
+      if (!newNote) {
+        throw new Error('Failed to create note')
+      }
 
       // Extract and create note links
       await this.updateNoteLinks(newNote.id, data.content)
@@ -77,11 +83,11 @@ export class NotesService {
     }
 
     let updateData: Partial<NewNote> = {}
-    
+
     if (data.title !== undefined) {
       updateData.title = data.title
     }
-    
+
     if (data.tags !== undefined) {
       updateData.tags = data.tags
     }
@@ -89,7 +95,7 @@ export class NotesService {
     // Handle content update
     if (data.content !== undefined) {
       const newContentHash = r2Storage.generateContentHash(data.content)
-      
+
       // Only upload if content has changed
       if (newContentHash !== existingNote.contentHash) {
         const { objectKey, contentHash, size } = await r2Storage.uploadNote(userId, noteId, data.content)
@@ -108,11 +114,16 @@ export class NotesService {
 
     updateData.updatedAt = new Date()
 
-    const [updatedNote] = await db
+    const result = await db
       .update(notes)
       .set(updateData)
       .where(and(eq(notes.id, noteId), eq(notes.userId, userId)))
       .returning()
+
+    const updatedNote = result[0]
+    if (!updatedNote) {
+      throw new Error('Failed to update note')
+    }
 
     return updatedNote
   }
@@ -122,14 +133,14 @@ export class NotesService {
    */
   async autoSaveNote(userId: string, noteId: string | null, data: UpdateNoteRequest): Promise<Note> {
     const saveKey = `${userId}:${noteId || 'new'}`
-    
+
     // Prevent concurrent auto-saves for the same note
     if (this.activeAutoSaves.has(saveKey)) {
       throw new Error('Auto-save already in progress for this note')
     }
 
     this.activeAutoSaves.add(saveKey)
-    
+
     try {
       if (noteId) {
         return await this.updateNote(userId, noteId, data)
@@ -228,13 +239,15 @@ export class NotesService {
       .where(and(...whereConditions))
 
     // Get total count
-    const [{ count }] = await db
+    const countResult = await db
       .select({ count: sql<number>`count(*)` })
       .from(notes)
       .where(and(...whereConditions))
 
+    const count = countResult[0]?.count || 0
+
     // Get paginated results
-    const orderColumn = sortBy === 'title' ? notes.title : 
+    const orderColumn = sortBy === 'title' ? notes.title :
                        sortBy === 'created_at' ? notes.createdAt : notes.updatedAt
     const orderDirection = sortOrder === 'asc' ? asc(orderColumn) : desc(orderColumn)
 
@@ -318,31 +331,37 @@ export class NotesService {
     // Extract all [[link]] patterns from content
     const linkPattern = /\[\[([^\]]+)\]\]/g
     const matches = Array.from(content.matchAll(linkPattern))
-    
+
     if (matches.length === 0) {
       return
     }
 
     // Find which linked notes actually exist
-    const linkTexts = matches.map(match => match[1])
+    const linkTexts = matches.map(match => match[1]).filter(Boolean)
+    if (linkTexts.length === 0) {
+      return
+    }
+
     const existingNotes = await db
       .select({ id: notes.id, title: notes.title })
       .from(notes)
-      .where(inArray(notes.title, linkTexts))
+      .where(sql`${notes.title} = ANY(${linkTexts})`)
 
     // Create note links
     const linksToInsert: NewNoteLink[] = []
-    
+
     for (const match of matches) {
       const linkText = match[1]
-      const targetNote = existingNotes.find(note => 
+      if (!linkText) continue
+
+      const targetNote = existingNotes.find(note =>
         note.title.toLowerCase() === linkText.toLowerCase()
       )
 
       linksToInsert.push({
         sourceNoteId: noteId,
         targetNoteId: targetNote?.id || null,
-        linkText,
+        linkText: linkText,
         isBroken: !targetNote,
       })
     }
@@ -396,7 +415,7 @@ export class NotesService {
    */
   async batchUpdateLastAccessed(userId: string, noteIds: string[]): Promise<void> {
     if (noteIds.length === 0) return
-    
+
     await db
       .update(notes)
       .set({ lastAccessedAt: new Date() })
@@ -414,7 +433,7 @@ export class NotesService {
   async getStaleNotes(userId: string, daysStale = 30): Promise<Note[]> {
     const staleDate = new Date()
     staleDate.setDate(staleDate.getDate() - daysStale)
-    
+
     return await db
       .select()
       .from(notes)
@@ -451,5 +470,3 @@ export class NotesService {
 }
 
 export const notesService = new NotesService()
-
-export { generateSessionId, sanitizeNoteTitle } from './client-utils'

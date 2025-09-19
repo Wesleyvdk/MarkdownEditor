@@ -325,7 +325,7 @@ export class MonitoringService {
   private async sendToMonitoringService(metrics: SystemMetrics): Promise<void> {
     try {
       // Example: Send to external monitoring service
-      await fetch('/api/metrics', {
+      await fetch('http://localhost:3010/api/metrics', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(metrics),

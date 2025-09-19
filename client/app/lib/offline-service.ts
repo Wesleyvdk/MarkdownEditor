@@ -74,7 +74,7 @@ export class OfflineService {
   private async checkConnectivity(): Promise<boolean> {
     try {
       // Try to fetch a small endpoint to verify actual connectivity
-      const response = await fetch('/api/health', {
+      const response = await fetch('http://localhost:3010/api/health', {
         method: 'HEAD',
         cache: 'no-cache',
         timeout: 5000,
@@ -176,7 +176,7 @@ export class OfflineService {
         // Increment attempt count
         note.attemptCount++
 
-        const response = await fetch('/api/notes/sync', {
+        const response = await fetch('http://localhost:3010/api/notes/sync', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
