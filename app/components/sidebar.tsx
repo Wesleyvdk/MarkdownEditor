@@ -56,6 +56,12 @@ const mockLinkedNotes = [
 ]
 
 export function Sidebar({ onCreateNote, onViewNotes, onDashboard, onNoteSelect, currentView, user }: SidebarProps) {
+  console.log('Sidebar props:', {
+    onCreateNote: typeof onCreateNote,
+    onViewNotes: typeof onViewNotes,
+    onDashboard: typeof onDashboard,
+    onNoteSelect: typeof onNoteSelect
+  })
   const [searchQuery, setSearchQuery] = useState("")
   const [activeTab, setActiveTab] = useState<"notes" | "tags" | "links">("notes")
   const [selectedTags, setSelectedTags] = useState<string[]>([])
@@ -174,7 +180,10 @@ export function Sidebar({ onCreateNote, onViewNotes, onDashboard, onNoteSelect, 
               variant={currentView === 'dashboard' ? 'default' : 'ghost'}
               size="sm"
               className="w-full justify-start"
-              onClick={onDashboard}
+              onClick={() => {
+                console.log('Dashboard clicked, handler:', typeof onDashboard)
+                onDashboard()
+              }}
             >
               <FileText className="h-4 w-4 mr-2" />
               Dashboard
@@ -183,7 +192,10 @@ export function Sidebar({ onCreateNote, onViewNotes, onDashboard, onNoteSelect, 
               variant={currentView === 'notes-list' ? 'default' : 'ghost'}
               size="sm"
               className="w-full justify-start"
-              onClick={onViewNotes}
+              onClick={() => {
+                console.log('All Notes clicked, handler:', typeof onViewNotes)
+                onViewNotes()
+              }}
             >
               <FileText className="h-4 w-4 mr-2" />
               All Notes
@@ -192,7 +204,10 @@ export function Sidebar({ onCreateNote, onViewNotes, onDashboard, onNoteSelect, 
               variant={currentView === 'new-note' || currentView === 'editor' ? 'default' : 'ghost'}
               size="sm"
               className="w-full justify-start"
-              onClick={onCreateNote}
+              onClick={() => {
+                console.log('New Note clicked, handler:', typeof onCreateNote)
+                onCreateNote()
+              }}
             >
               <Plus className="h-4 w-4 mr-2" />
               New Note
@@ -348,10 +363,7 @@ export function Sidebar({ onCreateNote, onViewNotes, onDashboard, onNoteSelect, 
           variant="ghost"
           size="sm"
           className="w-full justify-start text-xs md:text-sm"
-          onClick={() => {
-            console.log('AI Settings clicked')
-            setShowAISettings(true)
-          }}
+          onClick={() => setShowAISettings(true)}
         >
           <Brain className="h-4 w-4 mr-2" />
           <span className="hidden sm:inline">AI Settings</span>
@@ -361,10 +373,7 @@ export function Sidebar({ onCreateNote, onViewNotes, onDashboard, onNoteSelect, 
           variant="ghost"
           size="sm"
           className="w-full justify-start text-xs md:text-sm"
-          onClick={() => {
-            console.log('Admin Dashboard clicked')
-            setShowAdminDashboard(true)
-          }}
+          onClick={() => setShowAdminDashboard(true)}
         >
           <Shield className="h-4 w-4 mr-2" />
           <span className="hidden sm:inline">Admin Dashboard</span>
@@ -374,10 +383,7 @@ export function Sidebar({ onCreateNote, onViewNotes, onDashboard, onNoteSelect, 
           variant="ghost"
           size="sm"
           className="w-full justify-start text-xs md:text-sm"
-          onClick={() => {
-            console.log('General Settings clicked')
-            setShowGeneralSettings(true)
-          }}
+          onClick={() => setShowGeneralSettings(true)}
         >
           <Settings className="h-4 w-4 mr-2" />
           <span className="hidden sm:inline">Settings</span>

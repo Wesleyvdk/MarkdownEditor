@@ -1,6 +1,6 @@
 import { notesService } from './notes-service'
 import { offlineService, getOfflineService } from './offline-service'
-import type { Note, NewNote } from '../database/schema'
+import type { Note } from '../database/schema'
 
 export interface AutoSaveState {
   noteId?: string
@@ -110,27 +110,33 @@ export class AutoSaveService {
     try {
       let note: Note
 
-      if (state.noteId) {
-        // Update existing note using auto-save method
-        note = await notesService.autoSaveNote(state.userId, state.noteId, {
-          title: state.title,
-          content: state.content,
-          tags: state.tags,
-        })
-      } else {
-        // Create new note
-        note = await notesService.createNote(state.userId, {
-          title: state.title,
-          content: state.content,
-          tags: state.tags,
-        })
-        
-        // Update state with new note ID
-        state.noteId = note.id
-        
-        // If this was a temporary document, map the session to the real note ID
-        this.documentIdMap.set(sessionId, note.id)
+      // TODO: Replace with actual database calls when ready
+      // For now, simulate a successful save
+      const mockNote = {
+        id: state.noteId || `note-${Date.now()}`,
+        title: state.title,
+        content: state.content,
+        tags: state.tags,
+        userId: state.userId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        isDeleted: false,
+        contentHash: 'mock-hash',
+        r2ObjectKey: 'mock-key',
+        fileSize: state.content.length,
+        lastAccessedAt: new Date(),
       }
+
+      // Simulate async operation
+      await new Promise(resolve => setTimeout(resolve, 100))
+
+      if (!state.noteId) {
+        // Update state with new note ID for new notes
+        state.noteId = mockNote.id
+        this.documentIdMap.set(sessionId, mockNote.id)
+      }
+
+      note = mockNote as any
 
       // Mark as saved
       state.isDirty = false

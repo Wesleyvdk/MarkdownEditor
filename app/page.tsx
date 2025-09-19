@@ -46,7 +46,6 @@ export default function HomePage() {
   }, [])
 
   const handleNoteSelect = (noteId: string) => {
-    console.log('handleNoteSelect called with:', noteId)
     setAppState(prev => ({
       ...prev,
       currentView: 'editor',
@@ -76,6 +75,7 @@ export default function HomePage() {
   }
 
   const handleBackToDashboard = () => {
+    console.log('handleBackToDashboard called')
     setAppState(prev => ({
       ...prev,
       currentView: 'dashboard'
@@ -181,7 +181,10 @@ export default function HomePage() {
         <div className="w-64 border-r border-border">
           <Sidebar 
             onCreateNote={handleCreateNote}
-            onViewNotes={() => setAppState(prev => ({ ...prev, currentView: 'notes-list' }))}
+            onViewNotes={() => {
+              console.log('onViewNotes called')
+              setAppState(prev => ({ ...prev, currentView: 'notes-list' }))
+            }}
             onDashboard={handleBackToDashboard}
             onNoteSelect={handleNoteSelect}
             currentView={appState.currentView}

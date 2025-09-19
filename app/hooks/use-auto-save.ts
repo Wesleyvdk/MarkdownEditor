@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { clientAutoSaveService, type AutoSaveState } from '../lib/client-auto-save-service'
+import { autoSaveService, type AutoSaveState } from '../lib/auto-save-service'
 import type { Note } from '../database/schema'
 
 export interface UseAutoSaveOptions {
@@ -33,7 +33,7 @@ export function useAutoSave(options: UseAutoSaveOptions) {
 
   // Update status from auto-save state
   const updateStatus = useCallback(() => {
-    const state = clientAutoSaveService.getSaveState(sessionId)
+    const state = autoSaveService.getSaveState(sessionId)
     
     const newStatus: AutoSaveStatus = {
       isSaving: state?.saveInProgress ?? false,
@@ -51,7 +51,7 @@ export function useAutoSave(options: UseAutoSaveOptions) {
 
   // Schedule save function
   const scheduleSave = useCallback((title: string, content: string, tags: string[] = []) => {
-    clientAutoSaveService.scheduleSave(sessionId, {
+    autoSaveService.scheduleSave(sessionId, {
       userId,
       title,
       content,
@@ -67,7 +67,7 @@ export function useAutoSave(options: UseAutoSaveOptions) {
     try {
       setStatus(prev => ({ ...prev, isSaving: true, saveError: null }))
       
-      const note = await clientAutoSaveService.forceSave(sessionId)
+      const note = await autoSaveService.forceSave(sessionId)
       
       if (note && onSave) {
         onSave(note)
@@ -95,12 +95,12 @@ export function useAutoSave(options: UseAutoSaveOptions) {
 
   // Rename document
   const renameDocument = useCallback((newSessionId: string, newTitle: string) => {
-    clientAutoSaveService.renameDocument(sessionId, newSessionId, newTitle)
+    autoSaveService.renameDocument(sessionId, newSessionId, newTitle)
   }, [sessionId])
 
   // Get current note ID
   const getNoteId = useCallback(() => {
-    return clientAutoSaveService.getNoteId(sessionId)
+    return autoSaveService.getNoteId(sessionId)
   }, [sessionId])
 
   // Periodic status updates
@@ -112,20 +112,20 @@ export function useAutoSave(options: UseAutoSaveOptions) {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      clientAutoSaveService.cleanup(sessionId)
+      autoSaveService.cleanup(sessionId)
     }
   }, [sessionId])
 
   // Handle page unload
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      const hasUnsaved = clientAutoSaveService.hasUnsavedChanges(sessionId)
+      const hasUnsaved = autoSaveService.hasUnsavedChanges(sessionId)
       if (hasUnsaved) {
         e.preventDefault()
         e.returnValue = 'You have unsaved changes. Are you sure you want to leave?'
         
         // Attempt to save on page unload (though this may not complete)
-        clientAutoSaveService.forceSave(sessionId).catch(console.error)
+        autoSaveService.forceSave(sessionId).catch(console.error)
         
         return e.returnValue
       }
@@ -133,10 +133,10 @@ export function useAutoSave(options: UseAutoSaveOptions) {
 
     const handleUnload = () => {
       // Final attempt to save
-      const hasUnsaved = clientAutoSaveService.hasUnsavedChanges(sessionId)
+      const hasUnsaved = autoSaveService.hasUnsavedChanges(sessionId)
       if (hasUnsaved) {
         // Use navigator.sendBeacon for best chance of sending data on unload
-        const state = clientAutoSaveService.getSaveState(sessionId)
+        const state = autoSaveService.getSaveState(sessionId)
         if (state) {
           try {
             const data = JSON.stringify({
@@ -197,18 +197,18 @@ export function useMultiDocumentAutoSave(userId: string) {
   }, [userId])
 
   const removeSession = useCallback((sessionId: string) => {
-    clientAutoSaveService.cleanup(sessionId)
+    autoSaveService.cleanup(sessionId)
     sessions.delete(sessionId)
   }, [sessions])
 
   const saveAllSessions = useCallback(async () => {
-    await clientAutoSaveService.saveAllPending()
+    await autoSaveService.saveAllPending()
   }, [])
 
   return {
     createSession,
     removeSession,
     saveAllSessions,
-    getQueueSize: () => clientAutoSaveService.getQueueSize(),
+    getQueueSize: () => autoSaveService.getQueueSize(),
   }
 }
